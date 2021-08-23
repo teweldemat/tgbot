@@ -1,0 +1,185 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.TasksController.TaskViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Task Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+</head>
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h4>Task @Model.Task.Code: @Model.Task.Title</h4>
+            <h5>Report generated on @(IntData.toDateString(TGBot.Now(), "MMM dd,yyy HH:mm"))</h5>
+        </div>
+    </header>
+
+    <table >
+        <tr><td>Code:</td><td>@Model.Task.Code</td></tr>
+        <tr><td>Description:</td><td style="white-space: pre-line">@Model.Task.Description</td></tr>
+        <tr><td>Status:</td><td>@Model.StatusString</td></tr>
+        <tr><td>Due Date:</td><td>@Model.DueDate</td></tr>
+        <tr><td>Created on:</td><td>@(IntData.toDateString(Model.Task.CreateTime))</td></tr>
+        <tr><td>Created by:</td><td>@(Model.CreatedBy)</td></tr>
+        @if (Model.Task.ParentTaskId != null)
+        {
+            <tr><td>Subtask of:</td><td><a href="/task?id=@Model.ParentTask.Id">@(Model.ParentTask.CodeName)</a> </td></tr>
+        }
+        @if (Model.Contents.Count > 0)
+        {
+            int attachmentCount = 0;
+            <tr><td colspan="2">Attachments</td></tr>
+            <tr>
+                <td colspan="2">
+
+                    @foreach (var a in Model.Contents)
+                    {
+                        attachmentCount++;
+                        var caption = String.IsNullOrEmpty(a.Caption) ? "Attachment " + attachmentCount : a.Caption;
+                        <span style="padding:20px">
+                            @if (a.IsPicture)
+                            {
+                                <a href="/task/file?id=@(a.Id)">
+                                    <img src="/task/preview?id=@(a.Id)" />
+                                </a>
+                            }
+                            else if (a.IsLink)
+                            {
+                                <a href="@(a.Url)">
+                                    @caption
+                                </a>
+                            }
+                            else
+                            {
+                                <a href="/task/file?id=@(a.Id)">
+                                    @caption
+                                </a>
+                            }
+                        </span>
+                    }
+                </td>
+            </tr>
+        }
+    </table>
+    @if (Model.CheckList.Count > 0)
+    {
+        <h2>Checklist</h2>
+        <table>
+            @{
+                var n = 1;
+                foreach (var item in Model.CheckList)
+                {
+
+                    <tr>
+                        <td>@(n++)</td>
+                        <td>@(item.DoneTime == null ? "\u2610" : "\u2713")</td>
+                        <td>@item.Name</td>
+                    </tr>
+
+                }
+            }
+        </table>
+    }
+    @if (Model.Subtasks.Count > 0)
+    {
+        <h2>Subtasks</h2>
+        <table>
+            @{
+                foreach (var item in Model.Subtasks)
+                {
+
+                    <tr>
+                        <td><a href="/task?id=@item.Id">@item.Code (@TgBot.Tasks.TaskFullData.StatusString(item))</a> </td>
+                        <td>@item.Title</td>
+                    </tr>
+
+                }
+            }
+        </table>
+    }
+    
+    @if (Model.Workers.Count > 0)
+    { 
+        <h2>Team</h2>
+    <table>
+        @foreach (var u in Model.Workers)
+        {
+            <tr>
+                <td>@u.User.FullName</td>
+                <td>Joined on @u.JoinOn</td>
+            </tr>
+        }
+    </table>
+    }
+
+    @if (Model.Followers.Count > 0)
+    {
+        <h2>Followers</h2>
+        <table>
+            @foreach (var u in Model.Followers)
+            {
+                <tr>
+                    <td>@u.User.FullName</td>
+                    <td>Stared following @u.JoinOn</td>
+                </tr>
+            }
+        </table>
+    }
+    @if (Model.Comments.Count > 0)
+    {
+        <h2>Comments</h2>
+        <table>
+            @{
+                foreach (var item in Model.Comments)
+                {
+
+                    <tr>
+                        <td colspan="2" style="white-space: pre-line">@item.Comment</td>
+                    </tr>
+                    <tr>
+                        <td><small>By @item.Commenter</small></td>
+                        <td style="text-align:right"><small><i>@item.Time</i></small></td>
+                    </tr>
+                }
+            }
+        </table>
+    }
+
+    <table>
+        @{
+            <h2>History</h2>
+            var histNo = 1;
+            foreach (var item in Model.History)
+            {
+                @if (item == null)
+                {
+                    <tr>
+                        <td>@(histNo++)</td>
+                        <td>No data</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td>@(histNo++)</td>
+                        <td>@item.By</td>
+                        <td>@item.Operation</td>
+                        <td>On @item.On</td>
+                    </tr>
+                }
+            }
+        }
+    </table>
+
+
+</body>
+</html>

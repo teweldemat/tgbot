@@ -1,0 +1,57 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.TasksController.SummaryViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Task Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+</head>
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h4>Tasks List</h4>
+            <h5>Report generated on @(IntData.toDateString(TGBot.Now(), "MMM dd,yyy HH:mm"))</h5>
+        </div>
+    </header>
+    <h2>Active Tasks: @Model.ActiveTasks.Count</h2>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Task</th>
+                        <th>Status</th>
+                        <th>Last Updated</th>
+                        <th>Working On It</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                    int n = 1;
+                    @foreach (var task in @Model.ActiveTasks)
+                    {
+                    <tr>
+                        <td>@(task.Level==0?(n++).ToString():"")</td>
+                        <td><a href="/task?id=@(task.Task.Id)">@(task.Task.CodeName)</a></td>
+                        <td>@(task.StatusString)</td>
+                        <td>@task.LastUpdate</td>
+                        <td>@task.WorkingOnIt</td>
+                    </tr>
+                    }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,129 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.TasksController.TaskChartViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Plan Chart</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+    <style>
+    </style>
+</head>
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h5>Report generated on @(IntData.toDateString(TGBot.Now(), "MMM dd,yyy HH:mm"))</h5>
+        </div>
+    </header>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+
+            @if (Model.ColCount == 0)
+            {
+                <h1>Nothing to show</h1>
+            }
+            else
+            {
+                <table>
+                    <tr>
+                        @if (Model.NowPoint.i > 0 && Model.NowPoint.i < Model.ColCount - 1)
+                        {
+                            <td style="border-left:2px solid red" colspan="@(Model.NowPoint.i)"><smal>@Model.From</smal></td>
+                            <td style="border-left:2px solid red" colspan="@(Model.ColCount - Model.NowPoint.i)">Now</td>
+                            <td style="border-left:2px solid red"><smal>@Model.To</smal></td>
+                        }
+                        else
+                        {
+                            <td style="border-left:2px solid red"><smal>@Model.From</smal></td>
+                            <td colspan="@(Model.ColCount - 1)"></td>
+                            <td style="border-left:2px solid red"><smal>@Model.To</smal></td>
+                        }
+                    </tr>
+                    @foreach (var row in Model.Spans)
+                    {
+                        var first = true;
+                        <tr>
+                            @foreach (var span in row)
+                            {
+                                if (span is TgBot.Controllers.TasksController.TaskChartViewModel.Spacer)
+                                {
+                                    if (span.Index > Model.NowPoint.i || span.Right < Model.NowPoint.i)
+                                    {
+                                        <td colspan="@span.Width" style="@(first ? "border-left:2px solid red;" : "")background:white;padding-left:5px;padding-right:5px"></td>
+                                    }
+                                    else if (span.Index == Model.NowPoint.i)
+                                    {
+                                        <td colspan="@span.Width" style="border-left:2px solid red;background:white;padding-left:5px;padding-right:5px"></td>
+                                    }
+                                    else if (span.Right == Model.NowPoint.i)
+                                    {
+                                        <td colspan="@span.Width" style="border-right:2px solid red;background:white;padding-left:5px;padding-right:5px"></td>
+                                    }
+                                    else
+                                    {
+                                        <td colspan="@(Model.NowPoint.i - span.Index)" style="@(first ? "border-left:2px solid red;" : "")background:white;padding-left:5px;padding-right:5px"></td>
+                                        <td colspan="@(span.Width - (Model.NowPoint.i - span.Index))" style="border-right:2px solid red;background:white;padding-left:5px;padding-right:5px"></td>
+                                    }
+                                }
+                                else
+                                {
+                                    var ts = ((TgBot.Controllers.TasksController.TaskChartViewModel.TaskSpan)span);
+                                    String color = "black";
+                                    switch (ts.Task.Status)
+                                    {
+                                        case TgBot.Tasks.TaskStatus.Started:
+                                            color = "blue";
+                                            break;
+                                        case TgBot.Tasks.TaskStatus.Waiting:
+                                            color = "gray";
+                                            break;
+                                        case TgBot.Tasks.TaskStatus.Planned:
+                                            color = "black";
+                                            break;
+
+                                    }
+                                    if (span.Index > Model.NowPoint.i || span.Right < Model.NowPoint.i)
+                                    {
+                                        <td colspan="@span.Width" style="@(first ? "border-left:2px solid red;" : "")background:@color;color:white">
+                                            <a href="/task?id=@ts.Task.Id" title="@ts.Task.Title">@(ts.HCode)</a>
+                                        </td>
+                                    }
+                                    else if (span.Index == Model.NowPoint.i)
+                                    {
+                                        <td colspan="@span.Width" style="border-left:2px solid red;background:@color;color:white">
+                                            <a href="/task?id=@ts.Task.Id" title="@ts.Task.Title">@(ts.HCode)</a>
+                                        </td>
+                                    }
+                                    else if (span.Right == Model.NowPoint.i)
+                                    {
+                                        <td colspan="@span.Width" style="border-right:2px solid red;background:@color;color:white">
+                                            <a href="/task?id=@ts.Task.Id" title="@ts.Task.Title">@(ts.HCode)</a>
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        <td colspan="@(Model.NowPoint.i - span.Index)" style="@(first ? "border-left:2px solid red;" : "")background:@color;color:white">
+                                            <a href="/task?id=@ts.Task.Id" title="@ts.Task.Title">@(ts.HCode)</a>
+                                        </td>
+                                        <td colspan="@(span.Width - (Model.NowPoint.i - span.Index))" style="border-left: 2px solid red; background: @color; color: white">
+                                        </td>
+                                    }
+                                }
+                                first = false;
+                            }
+                            <td style="border-left:2px solid red"></td>
+                        </tr>
+                    }
+                </table>
+            }
+        </div>
+    </div>
+</body>
+</html>

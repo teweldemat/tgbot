@@ -1,0 +1,63 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.TasksController.TeamStatusViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Task Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+</head>
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h1>Team Overview</h1>
+            <h4>@Model.CompanyName</h4>
+            <h5>Report generated on @(IntData.toDateString(TGBot.Now(), "MMM dd,yyy HH:mm"))</h5>
+        </div>
+    </header>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Number of Active Task</th>
+                        <th>Last Task Update</th>
+                        <th>Duty Staion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in Model.Users)
+                    {
+                    <tr>
+                        <th><a href="/task/user?userid=@a.UserId">@a.Name</a></th>
+                        @if (a.NTasks== 0)
+                        {
+                    <th>None</th>
+                        }
+                        else
+                        {
+                            <th><span>Working on @((a.NTasks - a.NWaiting).ToString()) tasks</span>
+                                @if (a.NWaiting > 0)
+                                {
+                                <span>, @a.NWaiting tasks suspended</span>
+                                }
+                            </th>
+                        }
+                        <th>@(a.LastTaskUpdate==null?"Never updated task":a.LastTaskUpdate)</th>
+                        <th>@(a.DutyStation)</th>
+                    </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

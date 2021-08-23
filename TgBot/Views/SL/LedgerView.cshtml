@@ -1,0 +1,88 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.SmartLedgerController.LedgerViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Ledger of @Model.AccountName</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+
+    <style>
+    </style>
+</head>
+
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h1>Ledger of @Model.AccountName</h1>
+            <h4>@Model.CompanyName</h4>
+        </div>
+    </header>
+
+    <h2>Current Balance: @Model.EndingBalance.Balance</h2>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
+                        <th>Balance</th>
+                        <th>Remark</th>
+                    </tr>
+                    <tr>
+                        <th></th>
+                        <th colspan="2">Beginning Balance</th>
+                        <th class="w3-right-align">@Model.BeginningBalance</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var le in @Model.Ledger)
+                    {
+                        <tr>
+                            <td>@le.Date</td>
+                            <td class="w3-right-align">@le.DebitAmount</td>
+                            <td class="w3-right-align">@le.CreditAmount</td>
+                            <td class="w3-right-align">@le.Balance</td>
+                            @if (le.PrLink == null)
+                            {
+                                <td>@le.Remark</td>
+                            }
+                            else
+                            {
+                                <td><a href="@le.PrLink">@le.Remark</a></td>
+                            }
+
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>Total Transactions</th>
+                        <th class="w3-right-align">@Model.EndingBalance.DebitAmount</th>
+                        <th class="w3-right-align">@Model.EndingBalance.CreditAmount</th>
+                        <th></th>
+                        <th></th>
+                    </tr>
+                    <tr>
+                        <th></th>
+                        <th colspan="2">Ending Balance</th>
+                        <th class="w3-right-align">@Model.EndingBalance.Balance</th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>>
+</body>
+</html>

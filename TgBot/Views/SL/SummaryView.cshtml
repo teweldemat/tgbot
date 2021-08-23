@@ -1,0 +1,226 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.SmartLedgerController.SummaryViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Payment Flow Summary</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+
+    <style>
+    </style>
+</head>
+
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h1>Payments Summary</h1>
+            <h4>@Model.CompanyName</h4>
+        </div>
+    </header>
+    <h2>Accounts</h2>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Bank Account Number</th>
+                        <th>Payer</th>
+                        <th>Deposit Recorder</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in Model.Accounts)
+                    {
+                    <tr>
+                        <th>@a.Account.Name</th>
+                        <th>@(a.Account.Code==null?"N/A":a.Account.Code)</th>
+                        <th>@(a.PayerName==null?"[Not Set]":a.PayerName)</th>
+                        <th>@(a.DepositorName==null?"[Not Set]":a.DepositorName)</th>
+                        
+                        @if(a.LedgerLink==null)
+                        {
+                            <th class="w3-right-align">@a.Balance</th>
+                        }
+                        else
+                        {
+                            <th class="w3-right-align"><a href='@(a.LedgerLink)'>@a.Balance</a></th>
+                        }
+                    </tr>
+
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th>Total</th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th class="w3-right-align">@Model.TotalAccount</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    <h2>Open Payments: @Model.TotalPayment</h2>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Pay to</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        int n = 1;
+                        @foreach (var p in @Model.Payments)
+                        {
+                            <tr>
+                                <td>@(n++).</td>
+                                <td>@(IntData.toDateString(p.Payment.Time))</td>
+                                <td class="w3-right-align">@(IntData.toString(p.Payment.PositiveAmount))</td>
+                                <td>@p.Payment.ToPayTo</td>
+                                <td>@p.Payment.Note</td>
+                                <td>@p.StatusText</td>
+                                <td><a href="/sl/payment?id=@p.Payment.Id">@p.Payment.Reference</a></td>
+
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th></th>
+                        <th>Total Open Payments</th>
+                        <th class="w3-right-align">@Model.TotalPayment</th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <h2>Open Deposits: @Model.TotalDeposits</h2>
+    <div class="w3-container">
+
+        <hr>
+        <div class="w3-responsive w3-card-4">
+
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>From</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        n = 1;
+                        foreach (var p in @Model.Deposits)
+                        {
+
+                            <tr>
+                                <td>@(n++).</td>
+                                <td>@(IntData.toDateString(p.Payment.Time))</td>
+                                <td class="w3-right-align">@(IntData.toString(p.Payment.PositiveAmount))</td>
+                                <td>@p.Payment.ToPayTo</td>
+                                <td>@p.Payment.Note</td>
+                                <td>@p.StatusText</td>
+                                <td><a href="/sl/payment?id=@p.Payment.Id">@p.Payment.Reference</a></td>
+
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th></th>
+                        <th>Total Open Deposits</th>
+                        <th class="w3-right-align">@Model.TotalDeposits</th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <h2>Open Transfers: @Model.TotalTransfers</h2>
+    <div class="w3-container">
+
+        <hr>
+        <div class="w3-responsive w3-card-4">
+
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Pay to</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        n = 1;
+                        foreach (var p in @Model.Transfer)
+                        {
+                            <tr>
+                                <td>@(n++).</td>
+                                <td>@(IntData.toDateString(p.Payment.Time))</td>
+                                <td class="w3-right-align">@(IntData.toString(p.Payment.PositiveAmount))</td>
+                                <td>@p.Payment.ToPayTo</td>
+                                <td>@p.Payment.Note</td>
+                                <td>@p.StatusText</td>
+                                <td><a href="/sl/payment?id=@p.Payment.Id">@p.Payment.Reference</a></td>
+
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th></th>
+                        <th>Total Open Transfers</th>
+                        <th class="w3-right-align">@Model.TotalTransfers</th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

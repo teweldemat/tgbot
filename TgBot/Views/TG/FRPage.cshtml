@@ -1,0 +1,14 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@{
+    var frid = Context.Request.Query["frid"];
+}
+<html>
+    <head>
+        Fundraiser preview
+    </head>
+<body>
+    <img src="http://loc.webirr.com:82/tg/pic?frid=@(frid)" />
+</body>
+</html>

@@ -1,0 +1,90 @@
+﻿@*
+    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+*@
+@model TgBot.Controllers.TasksController.UserOverviewViewModel
+@using TgBot;
+@{
+}
+<html>
+<head>
+    <title>Task Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+</head>
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h1>Team Overview</h1>
+            <h4>@Model.CompanyName</h4>
+            <h5>Report generated on @(IntData.toDateString(TGBot.Now(), "MMM dd,yyy HH:mm"))</h5>
+        </div>
+    </header>
+    <div class="w3-container">
+        <hr>
+        <div class="w3-responsive w3-card-4">
+            <table class="w3-table w3-striped w3-bordered">
+                <thead>
+                    <tr>
+                        <th>Full Name</th>
+                        <td>@Model.User.FullName</td>
+                    </tr>
+                </thead>
+                <thead>
+                    <tr>
+                        <th>Short Name</th>
+                        <td>@(string.IsNullOrEmpty(Model.User.ShortName) ? "" : Model.User.ShortName)</td>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+    @if (Model.Tasks.Count > 0)
+    {
+        <h2>Tasks @(Model.User.FullName) is working on</h2>
+        <div class="w3-container">
+            <hr>
+            <div class="w3-responsive w3-card-4">
+                <table class="w3-table w3-striped w3-bordered">
+                    <tbody>
+                        @foreach (var a in Model.Tasks)
+                        {
+                            <tr>
+                                <th>@a.Task.Title (<a href="/task/?id=@a.Task.Id">@a.Task.Code</a>)</th>
+                                <th>@a.StatusString</th>
+                                <th>@(a.NWorkers > 1 ? $"With other {a.NWorkers -1}  person":"")</th>                                
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <h2>@(Model.User.FullName) is not working on any task currently</h2>
+    }
+    @if (Model.Following.Count > 0)
+    {
+        <h2>Tasks @(Model.User.FullName) is following</h2>
+        <div class="w3-container">
+            <hr>
+            <div class="w3-responsive w3-card-4">
+                <table class="w3-table w3-striped w3-bordered">
+                    <tbody>
+                        @foreach (var a in Model.Following)
+                        {
+                        <tr>
+                            <th>@a.Task.Title (<a href="/task/?id=@a.Task.Id">@a.Task.Code</a>)</th>
+                            <th>@a.StatusString</th>
+                            <th>@a.NWorkers person working on it</th>
+                        </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+            }
+    </body>
+</html>
