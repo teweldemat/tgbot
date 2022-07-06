@@ -57,7 +57,7 @@ namespace TgBot.Tasks
                 await bot.SendTextMessageAsync(
                 chatId: chatId,
                 text: "Welcome");
-                await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog(chatId, from), cancellationToken);
+                await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(chatId, from), cancellationToken);
                 return true;
             }
             var entity = service.GetEntity();
@@ -66,7 +66,7 @@ namespace TgBot.Tasks
                 await bot.SendTextMessageAsync(
                 chatId: chatId,
                 text: "Welcome.");
-                await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog(chatId, from), cancellationToken);
+                await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog<SmartLedgerDb>(chatId, from), cancellationToken);
                 return true;
             }
 
@@ -350,7 +350,7 @@ namespace TgBot.Tasks
                         await TGBot.PushDialog(from.Id.ToString(), new AddDutyStationDialog(chatId, from), cancellationToken);
                         return DialogResult.Terminated;
                     case MI_SET_USER_PROFILE:
-                        await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog(chatId, from), cancellationToken);
+                        await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(chatId, from), cancellationToken);
                         return DialogResult.Terminated;
                     case MI_SETUP_FLOW:
                         await TGBot.PushDialog(from.Id.ToString(), new SetTaskFlowDialog(chatId, from), cancellationToken);
@@ -450,7 +450,7 @@ namespace TgBot.Tasks
                             }
                             if (MI_SET_USER_PROFILE.Equals(msg.Text))
                             {
-                                await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog(msg.Chat.Id, msg.From), cancellationToken);
+                                await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(msg.Chat.Id, msg.From), cancellationToken);
                                 return true;
                             }
 

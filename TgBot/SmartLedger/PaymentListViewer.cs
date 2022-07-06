@@ -18,11 +18,18 @@ namespace TgBot.SmartLedger
         public int pageIndex;
         public int buttonMsgId;
         public string prevText;
+        public bool ActiveOnly;
+        public String filterText = null;
 
-        public PaymentListViewer(ChatId chatId, User user)
+        public PaymentListViewer(ChatId chatId, User user
+            , bool activeOnly, string filterText = null
+            )
         {
             this.chatId = chatId;
             this.user = user;
+            this.ActiveOnly = activeOnly;
+            this.filterText = filterText;
+
         }
         public static string FormatPayment(SmartLedgerService coreService, Payment payment,String numLabel)
         {
@@ -41,7 +48,7 @@ namespace TgBot.SmartLedger
         {
             
             var coreService = new SmartLedgerService();
-            var payments = coreService.GetOpenPayments(index, CONTLIST_PAGE_SIZE, out var totalN);
+            var payments = coreService.GetOpenPayments(index, CONTLIST_PAGE_SIZE, out var totalN, textFilter:this.filterText);
             if (payments.Count == 0)
             {
                 await bot.SendTextMessageAsync(chatId, "No open request");

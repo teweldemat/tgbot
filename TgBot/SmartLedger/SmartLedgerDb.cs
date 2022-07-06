@@ -2,14 +2,17 @@
 
 namespace TgBot.SmartLedger
 {
-    public class SmartLedgerDb : DbContext
+    public class TgBotDb:DbContext
     {
-        public DbSet<Workflow.WorkFlowInfo> WorkFlows { get; set; }
-        public DbSet<Workflow.WorkItem> WorkFlowItems { get; set; }
+        public DbSet<CashEntity> CashEntities { get; set; }
         public DbSet<AuditRecord> AuditRecords { get; set; }
         public DbSet<MisDelta> DeltaRecords { get; set; }
         public DbSet<MisUserProfile> MisUserProfiles { get; set; }
-        public DbSet<CashEntity> CashEntities { get; set; }
+        public DbSet<Workflow.WorkFlowInfo> WorkFlows { get; set; }
+        public DbSet<Workflow.WorkItem> WorkFlowItems { get; set; }
+    }
+    public class SmartLedgerDb : TgBotDb
+    {
         public DbSet<CashAccount> CashAccounts { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<CashLedgerEntry> CashLedgerEntries { get; set; }

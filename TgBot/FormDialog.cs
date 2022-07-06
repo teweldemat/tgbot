@@ -416,7 +416,8 @@ namespace TgBot
                                 LinkType = ContentLinkType.Url,
                                 ContentLink = message.Text,
                             });
-                            await bot.SendTextMessageAsync(chatId, "Url added.\n Add more url or attachment. Enter enter /end to finish",cancellationToken:cancellationToken);
+                            await bot.SendTextMessageAsync(chatId, "Url added.\n Enter label for the attachment", cancellationToken:cancellationToken);
+                            this.WaitingForCaption = true;
                         }
                         catch
                         {

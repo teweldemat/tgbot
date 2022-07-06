@@ -6,13 +6,13 @@ using Telegram.Bot.Types;
 
 namespace TgBot.SmartLedger
 {
-    public class SetUserProfileDialog:FormDialog
+    public class SetUserProfileDialog<T>:FormDialog where T:TgBotDb, new()
     {
         const string FIELD_SPECIFY_NAME = "SpecifyName";
         const string FIELD_NAME = "Name";
         const String FIELD_SHORT_NAME = "ShortName";
         const String FIELD_GENDER= "Gender";
-        bool UpdateMode => new SmartLedgerService().GetUserProfile(from.Id.ToString()) != null;
+        bool UpdateMode => new TgBotService<T>().GetUserProfile(from.Id.ToString()) != null;
         public SetUserProfileDialog(ChatId chatId, User from) : base(chatId, from)
         {
 
@@ -60,7 +60,7 @@ namespace TgBot.SmartLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
+            var service = new TgBotService<T>();
             String name;
             if (FieldData.ContainsKey(FIELD_SPECIFY_NAME) && !"YES".Equals(FieldData[FIELD_SPECIFY_NAME].Val()))
                 name = TGBot.FullName(from);

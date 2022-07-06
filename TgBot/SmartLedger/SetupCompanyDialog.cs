@@ -8,7 +8,7 @@ using Telegram.Bot.Types;
 
 namespace TgBot.SmartLedger
 {
-    public class SetupCompanyDialog : FormDialog
+    public class SetupCompanyDialog<T> : FormDialog where T:TgBotDb,new()
     {
         const string FIELD_COMPANY_NAME = "CompanyName";
         public SetupCompanyDialog(ChatId chatId, User from) : base(chatId, from)
@@ -19,14 +19,14 @@ namespace TgBot.SmartLedger
         public static List<FormFieldChoiceItem> GetUserChoices(Func<MisUserProfile, bool> filter = null)
         {
             if (filter == null)
-                return new SmartLedgerService().GetAllUserProfiles().Select(
+                return new TgBotService<T>().GetAllUserProfiles().Select(
                     x =>
                     new FormFieldChoiceItem(
                         x.UserId,
                         x.FullName
                     )).ToList();
             else
-                return new SmartLedgerService().GetAllUserProfiles().Where(filter).Select(
+                return new TgBotService<T>().GetAllUserProfiles().Where(filter).Select(
                     x =>
                     new FormFieldChoiceItem(
                         x.UserId,
@@ -51,7 +51,7 @@ namespace TgBot.SmartLedger
 
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
+            var service = new TgBotService<T>();
             try
             {
                 var e = service.GetEntity();
@@ -62,14 +62,9 @@ namespace TgBot.SmartLedger
                 }
                 service.CreateEntity(from.Id.ToString(), (string)FieldData[FIELD_COMPANY_NAME].Val(),
                     null, null);
-                await SmartLedgerBot.RestartAsync(bot, chatId, from,
-                    "Congradulations! Your company is registered."
-                    +$"\nNow send the telegram bot @{TGBot.meName} to users involved in the payment work flow namely:"
-                    +"\nUsers that will check payments (Checkers)"
-                    +"\nUsers that will approve payments (Approvers)"
-                    +"\nUsers that will make the payments (Payers)"
-                    + "\nUsers that will make accounting of the payments (Accountants)"
-                    , cancellationToken);
+                await bot.SendTextMessageAsync( chatId,"Congradulations! Your company is registered."
+                    +$"\nNow send the telegram bot @{TGBot.meName} to relevant users"
+                    , cancellationToken:cancellationToken);
             }
             catch (Exception ex)
             {

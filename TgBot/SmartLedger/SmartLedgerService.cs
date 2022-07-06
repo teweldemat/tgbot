@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace TgBot.SmartLedger
 {
-    public class SmartLedgerService : ServiceBase<SmartLedgerDb>
+    public class TgBotService<T>: ServiceBase<T> where T:TgBotDb,new()
     {
         protected delegate void AuditTransactNoReturnDelegate(SmartLedgerDb db, Guid aid);
         protected delegate T AuditTransactionReturnDelegate<T>(SmartLedgerDb db, Guid aid);
@@ -32,6 +32,142 @@ namespace TgBot.SmartLedger
             }
         }
 
+        protected T AuditTransactReturn<T>(String userId, String operation, object data, long now, AuditTransactionReturnDelegate<T> f)
+        {
+            var aid = RecordAudit(userId, operation + "_attempt", data, now, null, false);
+            using (var db = new SmartLedgerDb())
+            {
+                var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
+                try
+                {
+                    RecordAuditInternal(db, userId, operation, data, now, aid);
+                    var ret = f(db, aid);
+                    db.SaveChanges();
+                    tran.Commit();
+                    return ret;
+                }
+                catch (Exception ex)
+                {
+                    tran.Rollback();
+                    RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
+                    throw;
+                }
+            }
+        }
+        Guid RecordAuditInternal(TgBotDb db, String userId, String operation, Object deltaData, long now, Guid? parent)
+        {
+            var a = new AuditRecord
+            {
+                Id = Guid.NewGuid(),
+                Time = now,
+                Operation = operation,
+                UserId = userId,
+                ParentRecord = parent,
+            };
+            db.AuditRecords.Add(a);
+            if (deltaData != null)
+            {
+                var delta = new MisDelta
+                {
+                    AuditId = a.Id,
+                    Data = Newtonsoft.Json.JsonConvert.SerializeObject(deltaData),
+                    DataType = deltaData.GetType().ToString(),
+                    RecordNo = db.DeltaRecords.Count() + 1,
+                    Version = 1,
+                    Time = now
+
+                };
+                db.DeltaRecords.Add(delta);
+            }
+            db.SaveChanges();
+            return a.Id;
+        }
+        Guid RecordAudit(String userId, String operation, Object deltaData, long now, Guid? parent, bool suppressError)
+        {
+            try
+            {
+                return TransactReturn<Guid>(db =>
+                {
+                    return RecordAuditInternal(db, userId, operation, deltaData, now, parent);
+                });
+            }
+            catch (Exception ex)
+            {
+                Program.LogException("Error trying to record audit", ex);
+                if (suppressError)
+                    return Guid.Empty;
+                throw;
+            }
+        }
+        public MisUserProfile GetUserProfile(String userId)
+            => DbRead(db => db.MisUserProfiles.AsNoTracking().Where(x => x.UserId.Equals(userId)).FirstOrDefault());
+        public List<MisUserProfile> GetAllUserProfiles()
+            => DbRead(db => db.MisUserProfiles.AsNoTracking().ToList());
+        public List<MisUserProfile> GetActiveUserProfiles()
+            => DbRead(db => db.MisUserProfiles.Where(x => x.Permitted).AsNoTracking().ToList());
+        public void SetPaymentProfile(MisUserProfile profile)
+        {
+            var now = TGBot.Now();
+            AuditTransactNoReturn(
+                profile.UserId, "SetPaymentProfile", profile, now,
+                (db, aid) =>
+                {
+                    var existing = db.MisUserProfiles.AsNoTracking().Where(x => x.UserId.Equals(profile.UserId)).FirstOrDefault();
+                    if (existing == null)
+                    {
+                        profile.AuditId = aid;
+                        profile.Permitted = true;
+                        db.MisUserProfiles.Add(profile);
+                    }
+                    else
+                    {
+                        profile.AuditId = aid;
+                        profile.Permitted = existing.Permitted;
+                        db.MisUserProfiles.Update(profile);
+                    }
+                    db.SaveChanges();
+                });
+        }
+        public CashEntity GetEntity() => DbRead(db => GetEntityInternal(db));
+        protected CashEntity GetEntityInternal(T db)
+        {
+            return db.CashEntities.AsNoTracking().FirstOrDefault();
+        }
+        public Guid CreateEntity(String userId, String name, String ruleType, String ruleData)
+        {
+            var now = TGBot.Now();
+            return AuditTransactReturn<Guid>(
+                userId, "CreateEntity", new { name, ruleType, ruleData }, now,
+                (db, aid) =>
+                {
+
+                    if (string.IsNullOrEmpty(name))
+                        throw new UserFriendlyError("Name must provided");
+                    var entity = new CashEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        Owner = userId,
+                        AuditId = aid,
+                        TransactionHead = null,
+                        Name = name
+                    };
+                    db.CashEntities.Add(entity);
+                    var rule = new PaymentFlowRule
+                    {
+                        EntityId = entity.Id,
+                        AuditId = aid,
+                        RuleType = ruleType,
+                        Rule = ruleData,
+                    };
+                    db.PaymentFlowRules.Add(rule);
+                    db.SaveChanges();
+                    return entity.Id;
+                });
+        }
+
+    }
+    public class SmartLedgerService : TgBotService<SmartLedgerDb>
+    {
         internal Guid AddCashAccount(string userId, CashAccount cashAccount, Func<Guid, PaymentFlowRule> UpdateConfig)
         {
             var now = TGBot.Now();
@@ -94,110 +230,6 @@ namespace TgBot.SmartLedger
                 });
         }
 
-        protected T AuditTransactReturn<T>(String userId, String operation, object data, long now, AuditTransactionReturnDelegate<T> f)
-        {
-            var aid = RecordAudit(userId, operation + "_attempt", data, now, null, false);
-            using (var db = new SmartLedgerDb())
-            {
-                var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
-                try
-                {
-                    RecordAuditInternal(db, userId, operation, data, now, aid);
-                    var ret = f(db, aid);
-                    db.SaveChanges();
-                    tran.Commit();
-                    return ret;
-                }
-                catch (Exception ex)
-                {
-                    tran.Rollback();
-                    RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
-                    throw;
-                }
-            }
-        }
-        Guid RecordAuditInternal(SmartLedgerDb db, String userId, String operation, Object deltaData, long now, Guid? parent)
-        {
-            var a = new AuditRecord
-            {
-                Id = Guid.NewGuid(),
-                Time = now,
-                Operation = operation,
-                UserId = userId,
-                ParentRecord = parent,
-            };
-            db.AuditRecords.Add(a);
-            if(deltaData!=null)
-            {
-                var delta = new MisDelta
-                {
-                    AuditId=a.Id,
-                    Data = Newtonsoft.Json.JsonConvert.SerializeObject(deltaData),
-                    DataType = deltaData.GetType().ToString(),
-                    RecordNo = db.DeltaRecords.Count() + 1,
-                    Version = 1,
-                    Time=now
-                    
-                };
-                db.DeltaRecords.Add(delta);
-            }
-            db.SaveChanges();
-            return a.Id;
-        }
-        Guid RecordAudit(String userId, String operation, Object deltaData, long now, Guid? parent, bool suppressError)
-        {
-            try
-            {
-                return TransactReturn<Guid>(db =>
-                {
-                    return RecordAuditInternal(db, userId, operation, deltaData, now, parent);
-                });
-            }
-            catch (Exception ex)
-            {
-                Program.LogException("Error trying to record audit", ex);
-                if (suppressError)
-                    return Guid.Empty;
-                throw;
-            }
-        }
-        
-        public CashEntity GetEntity() => DbRead(db => GetEntityInternal(db));
-        protected CashEntity GetEntityInternal(SmartLedgerDb db)
-        {
-            return db.CashEntities.AsNoTracking().FirstOrDefault();
-        }
-        public Guid CreateEntity(String userId, String name, String ruleType, String ruleData)
-        {
-            var now = TGBot.Now();
-            return AuditTransactReturn<Guid>(
-                userId, "CreateEntity", new { name, ruleType, ruleData }, now,
-                (db, aid) =>
-            {
-
-                if (string.IsNullOrEmpty(name))
-                    throw new UserFriendlyError("Name must provided");
-                var entity = new CashEntity
-                {
-                    Id = Guid.NewGuid(),
-                    Owner = userId,
-                    AuditId = aid,
-                    TransactionHead = null,
-                    Name = name
-                };
-                db.CashEntities.Add(entity);
-                var rule = new PaymentFlowRule
-                {
-                    EntityId = entity.Id,
-                    AuditId = aid,
-                    RuleType = ruleType,
-                    Rule = ruleData,
-                };
-                db.PaymentFlowRules.Add(rule);
-                db.SaveChanges();
-                return entity.Id;
-            });
-        }
         public void SetRule(String userId, String ruleType, String ruleData)
         {
             var now = TGBot.Now();
@@ -247,36 +279,6 @@ namespace TgBot.SmartLedger
         {
             return db.Payments.AsNoTracking().Where(x => x.Reference.ToLower().Equals(pref.ToLower())).FirstOrDefault();
         }
-        public MisUserProfile GetUserProfile(String userId)
-            => DbRead(db => db.MisUserProfiles.AsNoTracking().Where(x => x.UserId.Equals(userId)).FirstOrDefault());
-        public List<MisUserProfile> GetAllUserProfiles()
-            => DbRead(db => db.MisUserProfiles.AsNoTracking().ToList());
-        public List<MisUserProfile> GetActiveUserProfiles()
-            => DbRead(db => db.MisUserProfiles.Where(x=>x.Permitted).AsNoTracking().ToList());
-        public void SetPaymentProfile(MisUserProfile profile)
-        {
-            var now = TGBot.Now();
-            AuditTransactNoReturn(
-                profile.UserId, "SetPaymentProfile", profile, now,
-                (db, aid) =>
-                {
-                    var existing = db.MisUserProfiles.AsNoTracking().Where(x => x.UserId.Equals(profile.UserId)).FirstOrDefault();
-                    if (existing == null)
-                    {
-                        profile.AuditId = aid;
-                        profile.Permitted = true;
-                        db.MisUserProfiles.Add(profile);
-                    }
-                    else
-                    {
-                        profile.AuditId = aid;
-                        profile.Permitted = existing.Permitted;
-                        db.MisUserProfiles.Update(profile);
-                    }
-                    db.SaveChanges();
-                });
-        }
-
         public Guid CreatePaymentFlow(String userId,
             String note,
             long amount,
@@ -645,12 +647,28 @@ namespace TgBot.SmartLedger
             }
         }
 
-        internal List<Payment> GetOpenPayments(int index, int pageSize, out int totalN, bool orderAscending = false)
+        internal List<Payment> GetOpenPayments(int index, int pageSize, out int totalN, bool orderAscending = false,string textFilter=null,bool activeOnly=true)
         {
             int count = 0;
             var ret = DbRead(db =>
               {
-                  Func<Payment, bool> filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED;
+                  Func<Payment, bool> filter;
+
+                  if (textFilter == null)
+                      filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED;
+                  else
+                  {
+                      if (activeOnly)
+                      {
+                          filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED
+                              && x.Note.Contains(textFilter);
+                      }
+                      else
+                      {
+                          filter = x => x.Note.Contains(textFilter);
+                      }
+                  }
+              
                   count = db.Payments.Where(filter).Count();
                   var res = db.Payments.Where(filter);
                   if (orderAscending)

@@ -26,7 +26,46 @@
         <tr><td>Date:</td><td>@(IntData.toDateString(Model.Payment.Time))</td></tr>
         <tr><td>Amount:</td><td>@(IntData.toString(Model.Payment.PositiveAmount))</td></tr>
         <tr><td>Reason:</td><td>@Model.Payment.Note</td></tr>
-        <tr><td>Pay to:</td><td>@Model.Payment.ToPayTo</td></tr>
+        @switch (Model.Payment.PaymentType)
+        {
+            case TgBot.SmartLedger.PaymentType.Payment:
+                <tr><td>Pay to:</td><td>@Model.Payment.ToPayTo</td></tr>
+                break;
+            case TgBot.SmartLedger.PaymentType.Deposit:
+                <tr><td>Receive from:</td><td>@Model.Payment.ToPayTo</td></tr>
+                break;
+            case TgBot.SmartLedger.PaymentType.Transfer:
+                <tr><td>Transfer to:</td><td>@(Model.TransferAccount==null?"Non set":Model.TransferAccount.Name)</td></tr>
+                break;
+        }
+        @if (Model.Sources.Count > 0)
+        {
+            var first = true;
+
+            <tr>
+                @if (Model.Payment.IsDeposit)
+                {
+                    <td>Deposit to:</td>
+                }
+                else
+                {
+                    <td>Pay from:</td>
+                }
+
+                <td>
+                    @foreach (var s in Model.Sources)
+                    {
+                        <span>@s.Account.Name: @(IntData.toString(s.Amount))</span>
+                        @if (!first)
+                        {
+                            <br />
+                        }
+                        first = false;
+                    }
+                </td>
+            </tr>
+        }
+
     </table>
     <table>
         @{

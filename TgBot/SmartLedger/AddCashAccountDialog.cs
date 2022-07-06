@@ -81,7 +81,7 @@ namespace TgBot.SmartLedger
                         Prompt = "Who makes payments for this account?",
                         FieldType = FieldType.Choices,
                         NextField = d => Task.FromResult<String>(FIELD_ACOUNT_DEPOSITOR),
-                        Choices= SetupCompanyDialog.GetUserChoices()
+                        Choices= SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
                     };
                 case FIELD_ACOUNT_DEPOSITOR:
                     return new FormDialogField
@@ -89,7 +89,7 @@ namespace TgBot.SmartLedger
                         Prompt = "Who makes deposits to this account?",
                         FieldType = FieldType.Choices,
                         NextField = d => Task.FromResult<String>(null),
-                        Choices = SetupCompanyDialog.GetUserChoices()
+                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
                     };
             }
             return null;

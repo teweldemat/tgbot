@@ -34,7 +34,7 @@ namespace TgBot.SmartLedger
         {
             return ProcessStart(bot, chatId, from, message, cancellationToken);
         }
-        private static async Task<bool> ProcessStart(ITelegramBotClient bot,
+        public static async Task<bool> ProcessStart(ITelegramBotClient bot,
             ChatId chatId, User from, String message,
             CancellationToken cancellationToken)
         {
@@ -45,7 +45,7 @@ namespace TgBot.SmartLedger
                 await bot.SendTextMessageAsync(
                 chatId: chatId,
                 text: "Welcome");
-                await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog(chatId, from), cancellationToken);
+                await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(chatId, from), cancellationToken);
                 return true;
             }
             var entity = service.GetEntity();
@@ -54,7 +54,7 @@ namespace TgBot.SmartLedger
                 await bot.SendTextMessageAsync(
                 chatId: chatId,
                 text: "Welcome.");
-                await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog(chatId, from), cancellationToken);
+                await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog<SmartLedgerDb>(chatId, from), cancellationToken);
                 return true;
             }
 
@@ -147,7 +147,7 @@ namespace TgBot.SmartLedger
                             }
                             if(MAIN_SET_USER_PROFILE.Equals(msg.Text))
                             {
-                                await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog(msg.Chat.Id, msg.From), cancellationToken);
+                                await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(msg.Chat.Id, msg.From), cancellationToken);
                                 return true;
                             }
                             //from this onward only permited users
@@ -161,7 +161,7 @@ namespace TgBot.SmartLedger
                                     return true;
                             }
 
-                            bool inlinQuery = false;
+                            /*bool inlinQuery = false;
                             foreach (var pr in new[] { Payment.PR_REF_PREFIX, Payment.DR_REF_PREFIX, Payment.TR_REF_PREFIX })
                             {
                                 if (msg.Text.StartsWith(pr, StringComparison.CurrentCultureIgnoreCase) || msg.Text.StartsWith("/" + pr, StringComparison.CurrentCultureIgnoreCase))
@@ -185,7 +185,7 @@ namespace TgBot.SmartLedger
                                     await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentDetailDialog(msg.Chat.Id, msg.From, payment.Id), cancellationToken);
                                     return true;
                                 }
-                            }
+                            }*/
 
 
                             switch (msg.Text)
@@ -197,7 +197,7 @@ namespace TgBot.SmartLedger
                                     await TGBot.PushDialog(msg.From.Id.ToString(), new AddCashAccountDialog(msg.Chat.Id, msg.From), cancellationToken);
                                     return true;
                                 case MAIN_SET_USER_PROFILE:
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog(msg.Chat.Id, msg.From), cancellationToken);
+                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(msg.Chat.Id, msg.From), cancellationToken);
                                     return true;
                                 case MAIN_REQUEST_PAYMENT:
                                     await TGBot.PushDialog(msg.From.Id.ToString(), new RequestPaymentDialog(msg.Chat.Id, msg.From), cancellationToken);
@@ -296,9 +296,47 @@ namespace TgBot.SmartLedger
             WebLinkBaseUrl = Program.GeneralConfiguration("Smartledger","Web");
         }
 
-        public Task<bool> HandleUpdateResidualAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+        public async Task<bool> HandleUpdateResidualAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            return Task.FromResult(false);
+
+            if (update.Type == UpdateType.Message && update.Message.Chat.Type == ChatType.Private && update.Message.Type == MessageType.Text)
+            {
+                var msg = update.Message;
+                var msgTxt = msg.Text.Trim();
+                bool taxCodeQuery = false;
+                foreach (var pr in new[] { Payment.PR_REF_PREFIX,Payment.DR_REF_PREFIX,Payment.TR_REF_PREFIX })
+                {
+                    if (msgTxt.StartsWith(pr, StringComparison.CurrentCultureIgnoreCase) ||
+                        msgTxt.StartsWith("/" + pr, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        taxCodeQuery = true;
+                        break;
+                    }
+                }
+                if (taxCodeQuery)
+                {
+                    string taskCode;
+                    if (msgTxt.StartsWith("/"))
+                        taskCode = msgTxt.Substring(1).Trim();
+                    else
+                        taskCode = msgTxt.Trim();
+                    taskCode = taskCode.Replace(" ", "");
+                    var service = new SmartLedgerService();
+                    var payment = service.GetPaymentByRef(taskCode);
+                    if (payment != null)
+                    {
+                        await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentDetailDialog(msg.Chat.Id, msg.From, payment.Id), cancellationToken);
+                        return true;
+                    }
+                }
+                if (msgTxt.Length > 3)
+                {
+                    await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentListViewer(msg.Chat.Id, msg.From, false, filterText: msgTxt), cancellationToken);
+                    return true;
+                }
+                await ProcessStart(botClient, msg.Chat.Id, msg.From, "Sorry, I don't understand what you are trying to say.\nAs a bot, I can sometimes be dumb.", cancellationToken);
+            }
+            return false;
         }
     }
 }

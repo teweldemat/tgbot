@@ -58,37 +58,59 @@ namespace TgBot.SmartLedger
 
         internal bool IsPayer(string userId, IEnumerable<PaymentSource> sources, bool deposit)
         {
-            foreach (var p in Payers)
-                if (userId.Equals(deposit ? p.Depositor : p.Payer) && sources.Where(x => x.CashAccountId == p.AccountId).Any())
-                    return true;
+            if(Payers!=null)
+                foreach (var p in Payers)
+                    if (userId.Equals(deposit ? p.Depositor : p.Payer) && sources.Where(x => x.CashAccountId == p.AccountId).Any())
+                        return true;
             return false;
         }
         internal bool IsPayer(string userId, Guid accountId, bool deposit)
         {
-            foreach (var p in Payers)
-                if (userId.Equals(deposit ? p.Depositor : p.Payer) && accountId == p.AccountId)
-                    return true;
+            if(this.Payers!=null)
+                foreach (var p in Payers)
+                    if (userId.Equals(deposit ? p.Depositor : p.Payer) && accountId == p.AccountId)
+                        return true;
             return false;
         }
 
         internal String GetPayer(Guid cashAccountId, bool deposit)
         {
-            foreach (var p in Payers)
-                if (cashAccountId == p.AccountId)
-                    return deposit ? p.Depositor : p.Payer;
+            if(Payers!=null)
+                foreach (var p in Payers)
+                    if (cashAccountId == p.AccountId)
+                        return deposit ? p.Depositor : p.Payer;
             return null;
         }
         internal void SetPayer(Guid cashAccountId, bool deposit, string payer)
         {
-            foreach (var p in Payers)
-                if (cashAccountId == p.AccountId)
+            AccountPayer existing = null;
+            if (this.Payers != null)
+            {
+                foreach (var p in Payers)
+                    if (cashAccountId == p.AccountId)
+                    {
+                        existing = p;
+                        break;
+                    }
+            }
+            if(existing!=null)
+            {
+                if (deposit)
+                    existing.Depositor = payer;
+                else
+                    existing.Payer = payer;
+            }
+            else
+            {
+                if (this.Payers == null)
+                    this.Payers = new List<AccountPayer>();
+                this.Payers.Add(new AccountPayer
                 {
-                    if (deposit)
-                        p.Depositor = payer;
-                    else
-                        p.Payer = payer;
-                    return;
-                }
+                    AccountId = cashAccountId,
+                    Depositor = deposit ? payer : null,
+                    Payer = deposit ? null : payer
+                });
+            }
         }
 
         internal List<Guid> GetAccountsOfPayer(string userId, bool deposit)

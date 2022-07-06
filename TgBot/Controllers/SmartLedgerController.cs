@@ -116,10 +116,17 @@ namespace TgBot.Controllers
                 public String Note { get; set; }
                 public List<PaymentSource> SetSources { get; set; }
             }
+            public class PaymentSource
+            {
+                public CashAccount Account;
+                public long Amount;
+            }
             public Payment Payment { get; set; }
             public String StatusString { get; set; }
             public List<WorkItem> WorkItems { get; set; }
             public String CompanyName { get; set; }
+            public CashAccount TransferAccount { get; set; }
+            public List<PaymentSource> Sources { get; internal set; }
         }
 
         [HttpGet]
@@ -168,7 +175,13 @@ namespace TgBot.Controllers
                     Payment = payment,
                     StatusString = statusString,
                     WorkItems = workItems,
-                    CompanyName = service.GetEntity().Name
+                    CompanyName = service.GetEntity().Name,
+                    TransferAccount = payment.TransferTo == null ? null : service.GetCashAccount(payment.TransferTo.Value),
+                    Sources = service.GetPaymentSources(payment.Id).Select(x => new PaymentViewModel.PaymentSource
+                    {
+                        Account = service.GetCashAccount(x.CashAccountId),
+                        Amount = x.Amount
+                    }).ToList()
                 };
                 return View("/Views/SL/PaymentView.cshtml", model);
             }

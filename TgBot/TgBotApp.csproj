@@ -11,18 +11,22 @@
     <Compile Remove="TrafficTickDiag\**" />
     <Compile Remove="TTDB\**" />
     <Compile Remove="TgBot\**" />
+    <Compile Remove="WeBirrAdmin\**" />
     <Compile Remove="WeFund\**" />
     <Content Remove="TrafficTickDiag\**" />
     <Content Remove="TTDB\**" />
     <Content Remove="TgBot\**" />
+    <Content Remove="WeBirrAdmin\**" />
     <Content Remove="WeFund\**" />
     <EmbeddedResource Remove="TrafficTickDiag\**" />
     <EmbeddedResource Remove="TTDB\**" />
     <EmbeddedResource Remove="TgBot\**" />
+    <EmbeddedResource Remove="WeBirrAdmin\**" />
     <EmbeddedResource Remove="WeFund\**" />
     <None Remove="TrafficTickDiag\**" />
     <None Remove="TTDB\**" />
     <None Remove="TgBot\**" />
+    <None Remove="WeBirrAdmin\**" />
     <None Remove="WeFund\**" />
   </ItemGroup>
 
@@ -52,6 +56,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="5.0.5" />
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="5.0.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="5.0.5" />
     <PackageReference Include="SixLabors.ImageSharp" Version="1.0.3" />
     <PackageReference Include="Telegram.Bot" Version="16.0.0" />
     <PackageReference Include="Telegram.Bot.Extensions.Polling" Version="0.2.0" />

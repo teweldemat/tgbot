@@ -161,6 +161,8 @@ namespace TgBot.SmartLedger
                             else
                                 str = $"Pay {IntData.toString(s.Amount)} Birr from {service.GetCashAccount(s.CashAccountId).Name}";
                             PaymentInst += "<pre>\n</pre>" + str;
+                            if(!String.IsNullOrEmpty(s.PaymentInstruction))
+                                PaymentInst += $"<pre>\n</pre> {s.PaymentInstruction}";
                         }
                     }
                     
