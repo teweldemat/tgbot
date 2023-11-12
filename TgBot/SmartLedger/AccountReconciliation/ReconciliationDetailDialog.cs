@@ -29,18 +29,21 @@ namespace TgBot.SmartLedger.AccountReconciliation
             var reconciliation = service.GetReconciliation(ReconciliationId);
             var choices = new List<FormFieldChoiceItem>();
             var w = reconciliation.WorkItemHead == null ? null : service.GetReconciliationWorkItem(reconciliation.WorkItemHead.Value);
-
+            var e = service.GetEntity();
+            if (e == null)
+                throw new InvalidOperationException("Company not configured");
             if (w != null)
             {
-                // Add choices based on the current work item type and user roles
-                // Example: 
-                if (w.WorkType == ReconciliationWorkItem.WORK_TYPE_REQUEST)
+                if (w.WorkType == ReconciliationWorkItem.WORK_TYPE_REQUEST 
+                    && e.Owner==base.from.Id.ToString())
                 {
                     choices.Add(new FormFieldChoiceItem(COMMAND_APPROVE, "Approve"));
                     choices.Add(new FormFieldChoiceItem(COMMAND_REJECT, "Reject"));
                 }
 
-                if (w.WorkType == ReconciliationWorkItem.WORK_TYPE_REJECTED)
+                if (w.WorkType == ReconciliationWorkItem.WORK_TYPE_REJECTED
+                    && reconciliation.Creator== base.from.Id.ToString()
+                    )
                 {
                     choices.Add(new FormFieldChoiceItem(COMMAND_CANCEL, "Cancel"));
                     choices.Add(new FormFieldChoiceItem(COMMAND_UPDATE, "Update Reconciliation"));

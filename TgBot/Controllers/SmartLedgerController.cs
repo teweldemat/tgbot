@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TgBot.SmartLedger;
+using TgBot.SmartLedger.AccountReconciliation;
 using static TgBot.FormDialog;
 
 namespace TgBot.Controllers
@@ -17,8 +18,33 @@ namespace TgBot.Controllers
 
     public class SmartLedgerController : Controller
     {
+        public class ReconciliationViewModel
+        {
+            public class WorkItemAttachment
+            {
+                public String PictureId { get; set; }
+                public bool IsPicture { get; set; }
+            }
+            public class WorkItem
+            {
+                public DateTime Date { get; set; }
+                public String User { get; set; }
+                public String Action { get; set; }
+                public List<WorkItemAttachment> Attachments { get; set; }
+                public String Note { get; set; }
+            }
+            
+            public CashAccount Account { get; set; }
+            public Reconciliation Reconciliation{ get; set; }
+            public String StatusString { get; set; }
+            public List<WorkItem> WorkItems { get; set; }
+            public String CompanyName { get; set; }
+            public CashAccount TransferAccount { get; set; }
+            public List<PaymentSource> Sources { get; internal set; }
 
-        
+        }
+
+
         [HttpGet]
         [Route("/sl/file/")]
         public IActionResult GetFile(String id)
@@ -184,6 +210,63 @@ namespace TgBot.Controllers
                     }).ToList()
                 };
                 return View("/Views/SL/PaymentView.cshtml", model);
+            }
+            catch (Exception ex)
+            {
+                return View("/Views/ErrorView.cshtml", ex);
+            }
+        }
+
+
+        [HttpGet]
+        [Route("/sl/reconciliation/")]
+        public IActionResult GetReconciliationDetail(String id)
+        {
+            try
+            {
+                var service = new SmartLedger.SmartLedgerService();
+                var reconciliation = service.GetReconciliation(Guid.Parse(id));
+                if (reconciliation == null)
+                    throw new Exception("Invalid reconciliation id:" + id);
+                var wi = reconciliation.WorkItemHead;
+                string statusString = "";
+                var list = new List<ReconciliationWorkItem>();
+                service.ForEachReconciliationWorkItem(reconciliation.Id, p =>
+                {
+                    list.Insert(0, p);
+                    return true;
+                });
+                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+                if (config == null)
+                    throw new Exception("Configuration not set");
+                var workItems = new List<ReconciliationViewModel.WorkItem>();
+                foreach (var w in list)
+                {
+                    var item = new ReconciliationViewModel.WorkItem
+                    {
+                        Date = new DateTime(w.Time),
+                        Attachments = service.GetWorkItemPictures(w.Id)
+                       .Select(x => new ReconciliationViewModel.WorkItemAttachment
+                       {
+                           IsPicture = isPicture(x.ImgeMime),
+                           PictureId = x.Id.ToString(),
+                       }).ToList(),
+                        Note = w.Note,
+                        User = service.GetUserProfile(w.UserId).FullName,
+                    };
+                    workItems.Add(item);
+                    statusString = ReconciliationWorkItem.StatusString(w.WorkType);
+                    item.Action = ReconciliationWorkItem.GetActionString(w);
+                }
+                var model = new ReconciliationViewModel
+                {
+                    Reconciliation = reconciliation,
+                    Account=service.GetCashAccount(reconciliation.AccountId),
+                    StatusString = statusString,
+                    WorkItems = workItems,
+                    CompanyName = service.GetEntity().Name, 
+                };
+                return View("/Views/SL/ReconciliationView.cshtml", model);
             }
             catch (Exception ex)
             {

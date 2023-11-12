@@ -5,6 +5,9 @@
     <UserSecretsId>1f3c3c39-41b4-48d6-89d4-e037e17c5ddb</UserSecretsId>
     <AssemblyName>TgBotApp</AssemblyName>
     <RootNamespace>TgBot</RootNamespace>
+	  <RazorCompileOnBuild>true</RazorCompileOnBuild>
+	  <RazorCompileOnPublish>true</RazorCompileOnPublish>
+	  <EmbedRazorGenerateSources>true</EmbedRazorGenerateSources>
   </PropertyGroup>
 
   <ItemGroup>

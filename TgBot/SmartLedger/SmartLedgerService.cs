@@ -403,10 +403,11 @@ namespace TgBot.SmartLedger
         }
 
 
-        public Guid CreateAccountReconciliationFlow(String userId,
+        public Guid CreateReconciliationFlow(String userId,
             String note,
             Guid accountId,
             long balance,
+            long accountBalance,
             IList<WorkItemPicture> attachments)
         {
             var now = TGBot.Now();
@@ -446,6 +447,7 @@ namespace TgBot.SmartLedger
                         Time = now,
                         AccountId = accountId,
                         Balance = balance,
+                        AccountBalance=accountBalance,
                         Note = note,
                         Creator = userId,
                     };
@@ -512,7 +514,9 @@ namespace TgBot.SmartLedger
 
 
 
-        public Guid AddReconciliationWorkItem(string userId, ReconciliationWorkItem work, IList<WorkItemPicture> attachments = null)
+        public Guid AddReconciliationWorkItem(string userId, 
+            ReconciliationWorkItem work, 
+            IList<WorkItemPicture> attachments = null)
         {
             var now = TGBot.Now();
             return AuditTransactReturn(
@@ -527,28 +531,31 @@ namespace TgBot.SmartLedger
                     if (reconciliation == null)
                         throw new UserFriendlyError("Invalid reconciliation id: " + work.ReconciliationId);
 
-                    ReconciliationWorkItem w = AddReconciliationWorkItemInternal(db, userId, work, aid, now);
+                    ReconciliationWorkItem w = AddReconciliationWorkItemInternal(db, userId, work, aid, now,reconciliation);
 
                     reconciliation.WorkItemHead = w.Id;
                     reconciliation.HeadTime = w.Time;
                     reconciliation.HeadType = w.WorkType;
-                    db.Reconciliations.Update(reconciliation);
+                    var account = this.GetCashAccount(reconciliation.AccountId);
+                    reconciliation.AccountBalance = account.Balance;
                     insertAttachments(db, w, attachments);
                     switch (work.WorkType)
                     {
                         case ReconciliationWorkItem.WORK_TYPE_REQUEST:
                             break;
                         case ReconciliationWorkItem.WORK_TYPE_APPROVE:
-                            CreateLedgerEntryForReconciliation(db,e,reconciliation, w, now, aid);
+                            CreateLedgerEntryForReconciliation(db,e,reconciliation, w, account,now, aid);
                             break;
                     }
+                    db.Reconciliations.Update(reconciliation);
 
                     db.SaveChanges();
                     return w.Id;
                 });
         }
 
-        private static ReconciliationWorkItem AddReconciliationWorkItemInternal(SmartLedgerDb db, string userId, ReconciliationWorkItem work, Guid aid, long now)
+        private static ReconciliationWorkItem AddReconciliationWorkItemInternal(SmartLedgerDb db, string userId, ReconciliationWorkItem work, Guid aid, 
+            long now,Reconciliation reconciliation)
         {
             var w = new ReconciliationWorkItem
             {
@@ -559,13 +566,14 @@ namespace TgBot.SmartLedger
                 ReconciliationId = work.ReconciliationId,
                 Data = work.Data,
                 Note = work.Note,
+                PrevItem= reconciliation.WorkItemHead,
                 WorkType = work.WorkType,
             };
             db.ReconciliationWorkItems.Add(w);
             return w;
         }
 
-        private void CreateLedgerEntryForReconciliation(SmartLedgerDb db,  CashEntity entity, Reconciliation reconciliation, ReconciliationWorkItem workItem, long time, Guid aid)
+        private CashAccount CreateLedgerEntryForReconciliation(SmartLedgerDb db,  CashEntity entity, Reconciliation reconciliation, ReconciliationWorkItem workItem, CashAccount account, long time, Guid aid)
         {
             var t = new Transaction
             {
@@ -582,7 +590,7 @@ namespace TgBot.SmartLedger
                 if (h.Time > time)
                     throw new InvalidOperationException("The reconciliation can't be applied as transactions are performed after the reconciliation time");
             }
-            var account = this.GetCashAccount(reconciliation.AccountId);
+            
             
             entries.Add(new CashLedgerEntry
             {
@@ -595,6 +603,7 @@ namespace TgBot.SmartLedger
             });
 
             TransactInternal(db, t, entries);
+            return account;
         }
 
 
@@ -811,6 +820,27 @@ namespace TgBot.SmartLedger
             });
         }
 
+        internal void ForEachReconciliationWorkItem(Guid reconciliationId, Func<ReconciliationWorkItem, bool> predicate)
+        {
+            DbReadVoid(db =>
+            {
+                ForEachReconciliationWorkItemInternal(db, reconciliationId, predicate);
+            });
+        }
+        private void ForEachReconciliationWorkItemInternal(SmartLedgerDb db, Guid reconciliationId, Func<ReconciliationWorkItem, bool> predicate)
+        {
+            var p = GetReconciliationInternal(db, reconciliationId);
+            if (p == null)
+                return;
+            var w = p.WorkItemHead;
+            while (w != null)
+            {
+                var wi = db.ReconciliationWorkItems.Where(x => x.Id == w).FirstOrDefault();
+                if (!predicate(wi))
+                    return;
+                w = wi.PrevItem;
+            }
+        }
         private void ForeEachWorkItemInternal(SmartLedgerDb db, Guid paymentId, Func<PaymentWorkItem, bool> predicate)
         {
             var p = GetPaymentInternal(db, paymentId);

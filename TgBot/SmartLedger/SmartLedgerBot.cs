@@ -308,7 +308,8 @@ namespace TgBot.SmartLedger
             var statusString = $"{(r.HeadType == null ? "Unknown" : ReconciliationWorkItem.StatusString(r.HeadType.Value))}";
             var account = service.GetCashAccount(r.AccountId);
             var text = $"Reference: {r.Reference}"
-                       + $"<pre>\n</pre>Ledger Balance: {IntData.toString(account.Balance)}"
+                        + $"<pre>\n</pre>Account: {account.Name} ({account.Code})"
+                       + $"<pre>\n</pre>Ledger Balance: {IntData.toString(r.AccountBalance)}"
                        + $"<pre>\n</pre>Actual Balance: {IntData.toString(r.Balance)}"
                        + $"<pre>\n</pre>Remark: {r.Note}"
                        + $"<pre>\n</pre>Status: {statusString}";

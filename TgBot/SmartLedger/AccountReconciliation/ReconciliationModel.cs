@@ -8,6 +8,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
     {
         public Guid AccountId { get; set; }
         public long Balance { get; set; }
+        public long AccountBalance { get; set; }
     }
     [Table("ReconciliationWorkItem")]
     public class ReconciliationWorkItem : WorkItem

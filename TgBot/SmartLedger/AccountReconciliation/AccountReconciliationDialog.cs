@@ -26,11 +26,12 @@ namespace TgBot.SmartLedger.AccountReconciliation
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
             var service = new SmartLedgerService();
-            var guid = service.CreateAccountReconciliationFlow(
+            var guid = service.CreateReconciliationFlow(
                from.Id.ToString(),
                this.Remark(),
                this.AccountId,
                this.Balance(),
+               service.GetCashAccount(this.AccountId).Balance,
                this.Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
                {
                    Image = x.Image,

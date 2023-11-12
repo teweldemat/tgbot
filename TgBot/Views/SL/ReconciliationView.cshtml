@@ -1,0 +1,70 @@
+﻿@model TgBot.Controllers.SmartLedgerController.ReconciliationViewModel
+@using TgBot;
+@{
+    Layout = null;
+}
+
+<html>
+<head>
+    <title>Reconciliation Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+</head>
+<body>
+    <header class="w3-container w3-theme w3-padding" id="myHeader">
+        <div class="w3-center">
+            <h4>@Model.CompanyName</h4>
+        </div>
+    </header>
+    <table>
+        <tr><td>Reference:</td><td>@Model.Reconciliation.Reference</td></tr>
+        <tr><td>Status:</td><td>@Model.StatusString</td></tr>
+        <tr><td>Date:</td><td>@(IntData.toDateString(Model.Reconciliation.Time))</td></tr>
+        <tr><td>Account:</td><td>@Model.Account.Name</td></tr>
+        <tr><td>Ledger Balance:</td><td>@(IntData.toString(Model.Reconciliation.AccountBalance))</td></tr>
+        <tr><td>Actual Balance:</td><td>@(IntData.toString(Model.Reconciliation.Balance))</td></tr>
+        <tr><td>Remark:</td><td>@Model.Reconciliation.Note</td></tr>
+    </table>
+    <table>
+        @{
+            var n = 1;
+            foreach (var wi in Model.WorkItems)
+            {
+                var attachmentCount = 1;
+                <tr>
+                    <td>@(n++). </td>
+                    <td>@wi.Action</td>
+                    <td>By @wi.User</td>
+                    <td>@(wi.Date.ToString())</td>
+                </tr>
+                <tr>
+                    <td colspan="4">
+                        @foreach (var a in wi.Attachments)
+                        {
+                            @if (a.IsPicture)
+                            {
+                                <a href="/sl/file?id=@(a.PictureId)">
+                                    <img src="/sl/preview?id=@(a.PictureId)" />
+                                </a>
+                            }
+                            else
+                            {
+                                <a href="/sl/file?id=@(a.PictureId)">
+                                    Attachment @(attachmentCount++)
+                                </a>
+                            }
+                        }
+                    </td>
+                </tr>
+                @if (!String.IsNullOrEmpty(wi.Note))
+                {
+                    <tr><td>Remark: </td><td colspan="5">@wi.Note</td></tr>
+                }
+                <tr><td colspan="6"></td></tr>
+            }
+        }
+    </table>
+</body>
+</html>
