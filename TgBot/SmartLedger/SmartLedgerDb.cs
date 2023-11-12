@@ -22,6 +22,9 @@ namespace TgBot.SmartLedger
         public DbSet<WorkItemPicture> WorkItemPictures { get; set; }
         public DbSet<PaymentFlowRule> PaymentFlowRules { get; set; }
 
+        public DbSet<AccountReconciliation.Reconciliation> Reconciliations { get; set; }
+        public DbSet<AccountReconciliation.ReconciliationWorkItem> ReconciliationWorkItems { get; set; }
+
         public DbSet<Tasks.MisTask> Tasks { get; set; }
         public DbSet<Tasks.TaskDelta> TaskDeltas { get; set; }
         public DbSet<Tasks.TaskContent> TaskContents { get; set; }

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TgBot.SmartLedger.AccountReconciliation;
 
 namespace TgBot.SmartLedger
 {
@@ -16,6 +17,7 @@ namespace TgBot.SmartLedger
             SetDepositor,
             SetName,
             ChangeType,
+            ReconcileAccount
         }
         const string FIELD_TYPE = "Type";
         const string FIELD_DATA = "String";
@@ -67,6 +69,9 @@ namespace TgBot.SmartLedger
                         accountUpdated = true;
                         account.Code = account.Code == null ? (string)FieldData[FIELD_DATA].Val() : null;
                         break;
+                    case ModifyType.ReconcileAccount:
+                        await TGBot.PushDialog(from.Id.ToString(), new AccountReconciliationDialog(chatId, from, this.CashAccountId), cancellationToken);
+                        break;
                     default:
                         break;
                 }
@@ -113,8 +118,9 @@ namespace TgBot.SmartLedger
                         Choices = new[] {
                             new FormFieldChoiceItem(ModifyType.SetName.ToString(), "Change Name"),
                             new FormFieldChoiceItem(ModifyType.SetPayer.ToString(), "Change Payer"),
-                            new FormFieldChoiceItem(ModifyType.SetDepositor.ToString(), "Change Deposior"),
+                            new FormFieldChoiceItem(ModifyType.SetDepositor.ToString(), "Change Depositor"),
                             new FormFieldChoiceItem(ModifyType.ChangeType.ToString(), account.Code == null ? "Make Bank Account" : "Make Cash Account"),
+                            new FormFieldChoiceItem(ModifyType.ReconcileAccount.ToString(), "Start Account Reconciliation")
                         },
                         NextField = d => {
                             if ((ModifyType)d[FIELD_TYPE].Val() == ModifyType.ChangeType && account.Code != null)

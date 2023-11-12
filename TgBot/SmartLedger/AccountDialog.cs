@@ -72,7 +72,7 @@ namespace TgBot.SmartLedger
             var service = new SmartLedgerService();
             var sources = service.GetPaymentSources(this.payment.Id);
 
-            service.AddWorkItem(from.Id.ToString(),
+            service.AddPaymentWorkItem(from.Id.ToString(),
                 new PaymentWorkItem
                 {
                     PaymentId=this.payment.Id,

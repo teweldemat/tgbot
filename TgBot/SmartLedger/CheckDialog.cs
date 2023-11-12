@@ -68,7 +68,7 @@ namespace TgBot.SmartLedger
         {
             var service = new SmartLedgerService();
 
-            service.AddWorkItem(from.Id.ToString(),
+            service.AddPaymentWorkItem(from.Id.ToString(),
                 new PaymentWorkItem
                 {
                     PaymentId = this.PaymentId,
@@ -301,7 +301,7 @@ namespace TgBot.SmartLedger
                     }
                 }
             }
-            service.AddWorkItem(
+            service.AddPaymentWorkItem(
                 userId:from.Id.ToString(),
                 work:new PaymentWorkItem
                 {

@@ -130,7 +130,7 @@ namespace TgBot.SmartLedger
             var total = sources.Sum(x => x.Amount);
             bool fullPayment = total == payment.Amount;
 
-            service.AddWorkItem(
+            service.AddPaymentWorkItem(
                 userId:from.Id.ToString(),
                 work:new PaymentWorkItem
                 {

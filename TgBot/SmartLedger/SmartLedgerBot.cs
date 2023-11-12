@@ -7,6 +7,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TgBot.SmartLedger.AccountReconciliation;
 
 namespace TgBot.SmartLedger
 {
@@ -93,6 +94,10 @@ namespace TgBot.SmartLedger
         public static String PaymentLink(Guid guid,String linkText)
         {
             return $"<a href=\"{WebLinkBaseUrl}/sl/payment?id={guid}\">{linkText}</a>";
+        }
+        public static String ReconciliationLink(Guid guid, String linkText)
+        {
+            return $"<a href=\"{WebLinkBaseUrl}/sl/reconciliation?id={guid}\">{linkText}</a>";
         }
         public static String GetLedgerLink(Guid accountId)
         {
@@ -191,7 +196,17 @@ namespace TgBot.SmartLedger
                             switch (msg.Text)
                             {
                                 case MAIN_SETUP_FLOW:
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetupFlowDialog(msg.Chat.Id, msg.From), cancellationToken);
+                                    var config = service.GetRule();
+                                    if (config != null && config.Rule != null)
+                                    {
+                                        // Existing configuration found, show ConfigurationViewer
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new ConfigurationViewer(msg.Chat.Id, msg.From), cancellationToken);
+                                    }
+                                    else
+                                    {
+                                        // No configuration found, proceed with SetupFlowDialog
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new SetupFlowDialog(msg.Chat.Id, msg.From), cancellationToken);
+                                    }
                                     return true;
                                 case MAIN_ADD_CASH_ACCOUNT:
                                     await TGBot.PushDialog(msg.From.Id.ToString(), new AddCashAccountDialog(msg.Chat.Id, msg.From), cancellationToken);
@@ -222,7 +237,7 @@ namespace TgBot.SmartLedger
             }
             return false;
         }
-        public static String FormatDetailHtml(Guid id)
+        public static String FormatPaymentDetailHtml(Guid id)
         {
 
             var service = new SmartLedgerService();
@@ -283,6 +298,40 @@ namespace TgBot.SmartLedger
                 text += $"<pre>\n</pre>Remark: {w.Note}";
             }
             text += $"<pre>\n</pre>{SmartLedgerBot.PaymentLink(p.Id,p.Reference)}";
+            return text;
+        }
+
+        public static String FormatReconciliationDetailHtml(Guid id)
+        {
+            var service = new SmartLedgerService();
+            var r = service.GetReconciliation(id);
+            var statusString = $"{(r.HeadType == null ? "Unknown" : ReconciliationWorkItem.StatusString(r.HeadType.Value))}";
+            var account = service.GetCashAccount(r.AccountId);
+            var text = $"Reference: {r.Reference}"
+                       + $"<pre>\n</pre>Ledger Balance: {IntData.toString(account.Balance)}"
+                       + $"<pre>\n</pre>Actual Balance: {IntData.toString(r.Balance)}"
+                       + $"<pre>\n</pre>Remark: {r.Note}"
+                       + $"<pre>\n</pre>Status: {statusString}";
+
+            if (r.WorkItemHead != null)
+            {
+                var w = service.GetReconciliationWorkItem(r.WorkItemHead.Value);
+                var userState = service.GetUserProfile(w.UserId);
+                switch (w.WorkType)
+                {
+                    case ReconciliationWorkItem.WORK_TYPE_REQUEST:
+                        text += $"<pre>\n</pre>Requested By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                        break;
+                    case ReconciliationWorkItem.WORK_TYPE_APPROVE:
+                        text += $"<pre>\n</pre>Approved By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                        break;
+                    case ReconciliationWorkItem.WORK_TYPE_REJECTED:
+                        text += $"<pre>\n</pre>Rejected By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                        break;
+                }
+                text += $"<pre>\n</pre>Remark: {w.Note}";
+            }
+            text += $"<pre>\n</pre>{ReconciliationLink(r.Id,r.Reference)}";
             return text;
         }
 

@@ -60,7 +60,7 @@ namespace TgBot.SmartLedger
             }
 
             var ac = service.GetCashAccount(account.Id);
-            var html = $"<strong>Accout Name:</strong> {ac.Name}"
+            var html = $"<strong>Account Name:</strong> {ac.Name}"
                     + $"<pre>\n</pre><strong>Account Type:</strong> {(String.IsNullOrEmpty(ac.Code) ? "Cash on Hand" : "Bank")}"
                     + $"<pre>\n</pre><strong>Balance:</strong> {IntData.toString(ac.Balance)}"
                     + $"<pre>\n</pre><strong>Payer:</strong> { payer}"

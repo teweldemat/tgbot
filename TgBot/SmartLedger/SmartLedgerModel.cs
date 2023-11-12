@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore.Query.Internal;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -179,23 +180,40 @@ namespace TgBot.SmartLedger
         public String Rule { get; set; }
         public Guid AuditId { get; set; }
     }
-    [Table("Payment")]
-    public class Payment
+    public abstract class WorkFlowState
     {
-        public const String PR_REF_PREFIX = "PR";
-        public const String DR_REF_PREFIX = "DR";
-        public const String TR_REF_PREFIX = "TR";
+        public const string GEN_REF_PREFIX = "W";
         public Guid Id { get; set; }
         public long Time { get; set; }
-        public long Amount { get; set; }
         public String Note { get; set; }
         public Guid? WorkItemHead { get; set; }
         public long? HeadTime { get; set; }
         public int? HeadType { get; set; }
         public Guid AuditId { get; set; }
         public String Creator { get; set; }
-        public String ToPayTo { get; set; }
         public String Reference { get; set; }
+    }
+    public abstract class WorkItem
+    {
+        public Guid Id { get; set; }
+        public Guid? PrevItem { get; set; }
+        public String UserId { get; set; }
+        public long Time { get; set; }
+        public String Note { get; set; }
+        public Guid AuditId { get; set; }
+        public int WorkType { get; set; }
+        [Column(TypeName = "ntext")]
+        public String Data { get; set; }
+    }
+    [Table("Payment")]
+    public class Payment:WorkFlowState
+    {
+        public const String PR_REF_PREFIX = "PR";
+        public const String DR_REF_PREFIX = "DR";
+        public const String TR_REF_PREFIX = "TR";
+
+        public long Amount { get; set; }
+        public String ToPayTo { get; set; }
         public Guid? TransferTo { get; set; }
         [NotMapped]
         public bool IsDeposit => Amount < 0;
@@ -220,7 +238,7 @@ namespace TgBot.SmartLedger
         public string PaymentInstruction { get; set; }
     }
     [Table("PaymentWorkItem")]
-    public class PaymentWorkItem
+    public class PaymentWorkItem:WorkItem
     {
         public const int WORK_TYPE_CREATE = 1;
         public const int WORK_TYPE_CHECK = 2;
@@ -236,16 +254,8 @@ namespace TgBot.SmartLedger
         public const int WORK_TYPE_SEND_BACK_TO_PAYMENT = 12;
         public const int WORK_TYPE_SEND_BACK_TO_ACCOUNTING = 13;
         public const int WORK_TYPE_RESTART = 14;
-        public Guid Id { get; set; }
-        public Guid PaymentId { get; set; }
-        public Guid? PrevItem { get; set; }
-        public String UserId { get; set; }
-        public long Time { get; set; }
-        public String Note { get; set; }
-        public Guid AuditId { get; set; }
-        public int WorkType { get; set; }
-        [Column(TypeName = "ntext")]
-        public String Data { get; set; }
+
+        public Guid PaymentId {get;set;}
         public static String StatusString(int workType, Payment payment)
         {
             switch (workType)
@@ -333,6 +343,7 @@ namespace TgBot.SmartLedger
     [Table("WorkItemPicture")]
     public class WorkItemPicture
     {
+        
         public Guid Id { get; set; }
         public Guid WorkItemId { get; set; }
         public int OrderN { get; set; }
@@ -348,4 +359,9 @@ namespace TgBot.SmartLedger
                 LinkType=ContentLinkType.Url };
         }
     }
+
+    
+
+   
+
 }

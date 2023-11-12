@@ -1,7 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Npgsql.Replication;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mail;
+using TgBot.SmartLedger.AccountReconciliation;
 
 namespace TgBot.SmartLedger
 {
@@ -275,6 +278,12 @@ namespace TgBot.SmartLedger
         {
             return db.Payments.AsNoTracking().Where(x => x.Id == paymentId).FirstOrDefault();
         }
+        private Reconciliation GetReconciliationInternal(SmartLedgerDb db, Guid reconciliationId)
+        {
+            return db.Reconciliations.AsNoTracking().Where(x => x.Id == reconciliationId).FirstOrDefault();
+        }
+        public Reconciliation GetReconciliation(Guid reconciliationId)
+            => DbRead(db =>db.Reconciliations.AsNoTracking().Where(x => x.Id == reconciliationId).FirstOrDefault());
         private Payment GetPaymentByRefInternal(SmartLedgerDb db, String pref)
         {
             return db.Payments.AsNoTracking().Where(x => x.Reference.ToLower().Equals(pref.ToLower())).FirstOrDefault();
@@ -387,7 +396,80 @@ namespace TgBot.SmartLedger
                 });
         }
 
-        private static void insertAttachments(SmartLedgerDb db, PaymentWorkItem w, IList<WorkItemPicture> attachments)
+
+        public Guid CreateAccountReconciliationFlow(String userId,
+            String note,
+            Guid accountId,
+            long balance,
+            IList<WorkItemPicture> attachments)
+        {
+            var now = TGBot.Now();
+            return AuditTransactReturn(
+                userId, "CreateAccountReconciliationFlow", new { accountId, balance, note }, now,
+                (db, aid) =>
+                {
+                    var e = GetEntityInternal(db);
+                    if (e == null)
+                        throw new UserFriendlyError("Company information not setup");
+                    int max = 0;
+
+                    string reference;
+
+                    string prefix = WorkFlowState.GEN_REF_PREFIX;
+
+                    foreach (var pr in db.Payments)
+                    {
+                        if (pr.Reference.StartsWith(prefix))
+                        {
+                            var ser = int.Parse(pr.Reference.Substring(prefix.Length));
+                            if (ser > max)
+                                max = ser;
+                        }
+                    }
+                    reference = prefix + (max + 1);
+
+
+
+                    Reconciliation p;
+
+                    p = new Reconciliation
+                    {
+                        Id = Guid.NewGuid(),
+                        Reference = reference,
+                        AuditId = aid,
+                        Time = now,
+                        AccountId = accountId,
+                        Balance = balance,
+                        Note = note,
+                        Creator = userId,
+                    };
+
+                    var w = new ReconciliationWorkItem
+                    {
+                        Id = Guid.NewGuid(),
+                        AuditId = aid,
+                        Data = p.Balance.ToString(),
+                        Note = note,
+                        PrevItem = p.WorkItemHead,
+                        Time = now,
+                        UserId = userId,
+                        WorkType = ReconciliationWorkItem.WORK_TYPE_REQUEST,
+                        ReconciliationId = p.Id,
+
+                    };
+                    p.WorkItemHead = w.Id;
+                    p.HeadTime = w.Time;
+                    p.HeadType = w.WorkType;
+                    db.Reconciliations.Add(p);
+                    db.ReconciliationWorkItems.Add(w);
+
+                    insertAttachments(db, w, attachments);
+                    db.SaveChanges();
+                    return p.Id;
+                });
+        }
+
+        private static void insertAttachments(SmartLedgerDb db, WorkItem w, IList<WorkItemPicture> attachments)
         {
             int n = 1;
             if (attachments == null)
@@ -421,7 +503,91 @@ namespace TgBot.SmartLedger
         }
         public List<PaymentSource> GetPaymentSources(Guid paymentId)
             => DbRead(db => db.PaymentSources.Where(x => x.PaymentId == paymentId).ToList());
-        public Guid AddWorkItem(String userId,
+
+
+
+        public Guid AddReconciliationWorkItem(string userId, ReconciliationWorkItem work, IList<WorkItemPicture> attachments = null)
+        {
+            var now = TGBot.Now();
+            return AuditTransactReturn(
+                userId, "AddReconciliationWorkItem", work, now,
+                (db, aid) =>
+                {
+                    var e = GetEntityInternal(db);
+                    if (e == null)
+                        throw new UserFriendlyError("Company information not setup");
+
+                    var reconciliation = GetReconciliationInternal(db, work.ReconciliationId);
+                    if (reconciliation == null)
+                        throw new UserFriendlyError("Invalid reconciliation id: " + work.ReconciliationId);
+
+                    ReconciliationWorkItem w = AddReconciliationWorkItemInternal(db, userId, work, aid, now);
+
+                    reconciliation.WorkItemHead = w.Id;
+                    reconciliation.HeadTime = w.Time;
+                    reconciliation.HeadType = w.WorkType;
+                    db.Reconciliations.Update(reconciliation);
+                    insertAttachments(db, w, attachments);
+                    switch (work.WorkType)
+                    {
+                        case ReconciliationWorkItem.WORK_TYPE_REQUEST:
+                            break;
+                        case ReconciliationWorkItem.WORK_TYPE_APPROVE:
+                            CreateLedgerEntryForReconciliation(db,e,reconciliation, w, now, aid);
+                            break;
+                    }
+
+                    db.SaveChanges();
+                    return w.Id;
+                });
+        }
+
+        private static ReconciliationWorkItem AddReconciliationWorkItemInternal(SmartLedgerDb db, string userId, ReconciliationWorkItem work, Guid aid, long now)
+        {
+            var w = new ReconciliationWorkItem
+            {
+                Id = Guid.NewGuid(),
+                AuditId = aid,
+                Time = now,
+                UserId = userId,
+                ReconciliationId = work.ReconciliationId,
+                Data = work.Data,
+                Note = work.Note,
+                WorkType = work.WorkType,
+            };
+            db.ReconciliationWorkItems.Add(w);
+            return w;
+        }
+
+        private void CreateLedgerEntryForReconciliation(SmartLedgerDb db,  CashEntity entity, Reconciliation reconciliation, ReconciliationWorkItem workItem, long time, Guid aid)
+        {
+            var t = new Transaction
+            {
+                Id = Guid.NewGuid(),
+                AuditId = aid,
+                PrevTransaction = entity.TransactionHead,
+                Payment = reconciliation.Id,
+                Remark = $"Change for request: {reconciliation.Note}({reconciliation.Reference})"
+            };
+            var entries = new List<CashLedgerEntry>();
+
+            var account = this.GetCashAccount(reconciliation.AccountId);
+            
+            entries.Add(new CashLedgerEntry
+            {
+                Id = Guid.NewGuid(),
+                AccountId = reconciliation.AccountId,
+                Amount = reconciliation.Balance-account.Balance,
+                Time = time,
+                TransactionId = t.Id,
+                Remark = t.Remark
+            });
+
+            TransactInternal(db, t, entries);
+        }
+
+
+        public Guid AddPaymentWorkItem(String userId,
             PaymentWorkItem work,
             IList<WorkItemPicture> attachments = null,
             IEnumerable<PaymentSource> completePayment = null,
@@ -441,15 +607,15 @@ namespace TgBot.SmartLedger
                     if (payment == null)
                         throw new UserFriendlyError("Invalid payment id: " + work.PaymentId);
 
-                    PaymentWorkItem w = AddWorkItemInternal(db, userId, work, aid, now, payment);
+                    PaymentWorkItem w = AddPaymentWorkItemInternal(db, userId, work, aid, now, payment);
 
                     payment.WorkItemHead = w.Id;
                     payment.HeadTime = w.Time;
                     payment.HeadType = w.WorkType;
                     db.Payments.Update(payment);
 
-
                     insertAttachments(db, w, attachments);
+
                     if (setPaymentSources != null)
                     {
                         foreach (var ps in setPaymentSources)
@@ -552,8 +718,8 @@ namespace TgBot.SmartLedger
                     return w.Id;
                 });
         }
-
-        private static PaymentWorkItem AddWorkItemInternal(SmartLedgerDb db, string userId, PaymentWorkItem work,
+        
+        private static PaymentWorkItem AddPaymentWorkItemInternal(SmartLedgerDb db, string userId, PaymentWorkItem work,
             Guid aid, long now, Payment payment)
         {
             var w = new PaymentWorkItem
@@ -623,7 +789,9 @@ namespace TgBot.SmartLedger
         internal PaymentWorkItem GetWorkItem(Guid id)
             => DbRead(db =>
              db.WorkItems.AsNoTracking().Where(x => x.Id == id).FirstOrDefault());
-
+        internal ReconciliationWorkItem GetReconciliationWorkItem(Guid id)
+            => DbRead(db =>
+             db.ReconciliationWorkItems.AsNoTracking().Where(x => x.Id == id).FirstOrDefault());
         internal void ForEachWorkItem(Guid paymentId, Func<PaymentWorkItem, bool> predicate)
         {
             DbReadVoid(db =>

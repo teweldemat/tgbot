@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <UserSecretsId>1f3c3c39-41b4-48d6-89d4-e037e17c5ddb</UserSecretsId>
     <AssemblyName>TgBotApp</AssemblyName>
     <RootNamespace>TgBot</RootNamespace>

@@ -186,7 +186,7 @@ namespace TgBot.SmartLedger
             {
                 FieldType = FieldType.Choices,
                 Choices = choices,
-                PromptHtml = SmartLedgerBot.FormatDetailHtml(payment.Id) + PaymentInst
+                PromptHtml = SmartLedgerBot.FormatPaymentDetailHtml(payment.Id) + PaymentInst
             };
         }
 

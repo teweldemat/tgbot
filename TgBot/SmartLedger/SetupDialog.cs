@@ -8,35 +8,42 @@ namespace TgBot.SmartLedger
 {
     public class SetupFlowDialog:FormDialog
     {
-        const string FIELD_CHECKER_ONE = "CheckerOne";
-        const string FIELD_APPROVE_ONE = "ApproveOne";
-        const string FIELD_ACCOUNTANT = "Accountant";
-        
+        public const string FIELD_CHECKER_ONE = "CheckerOne";
+        public const string FIELD_APPROVE_ONE = "ApproveOne";
+        public const string FIELD_ACCOUNTANT = "Accountant";
 
-        public SetupFlowDialog(ChatId chatId, User from) : base(chatId, from)
+
+        public string selectedFieldToUpdate;
+
+        public SetupFlowDialog(ChatId chatId, User from, string selectedField = null) : base(chatId, from)
         {
-
+            this.selectedFieldToUpdate = selectedField;
         }
-        public override string FirstField => FIELD_CHECKER_ONE;
-        
+        public override string FirstField => string.IsNullOrEmpty(selectedFieldToUpdate) ? FIELD_CHECKER_ONE : selectedFieldToUpdate;
+
         public override FormDialogField GetFieldDef(string key)
         {
-            switch(key)
+            if (!string.IsNullOrEmpty(selectedFieldToUpdate) && key != selectedFieldToUpdate)
+            {
+                return null; // Skip fields that are not selected for updating
+            }
+
+            switch (key)
             {
                 case FIELD_CHECKER_ONE:
                     return new FormDialogField
                     {
                         Prompt = "Whom would you like to check payments?",
                         FieldType = FieldType.Choices,
-                        NextField = d => Task.FromResult(FIELD_APPROVE_ONE),
-                        Choices=SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
+                        NextField = d => string.IsNullOrEmpty(selectedFieldToUpdate) ? Task.FromResult(FIELD_APPROVE_ONE) : Task.FromResult<string>(null),
+                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
                     };
                 case FIELD_APPROVE_ONE:
                     return new FormDialogField
                     {
                         Prompt = "Whom do you want to approve payments?",
                         FieldType = FieldType.Choices,
-                        NextField = d => Task.FromResult(FIELD_ACCOUNTANT),
+                        NextField = d => string.IsNullOrEmpty(selectedFieldToUpdate) ? Task.FromResult(FIELD_ACCOUNTANT) : Task.FromResult<string>(null),
                         Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
                     };
                 case FIELD_ACCOUNTANT:
@@ -44,14 +51,15 @@ namespace TgBot.SmartLedger
                     {
                         Prompt = "Who is the accountant?",
                         FieldType = FieldType.Choices,
-                        NextField = null,
+                        NextField = null, // This is the last field, so it's always null
                         Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
                     };
             }
             return null;
         }
 
-        
+
+
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
             var service = new SmartLedgerService();
@@ -68,12 +76,15 @@ namespace TgBot.SmartLedger
 
                 var config = new SimplePaymentFlowConfiguration
                 {
-                    Checker1 = (string)FieldData[FIELD_CHECKER_ONE].Val(),
-                    Approver1 = (string)FieldData[FIELD_APPROVE_ONE].Val(),
-                    Accountant= (string)FieldData[FIELD_ACCOUNTANT].Val(),
+                    // Only update the field that has been selected
+                    Checker1 = selectedFieldToUpdate == FIELD_CHECKER_ONE ? (string)FieldData[FIELD_CHECKER_ONE].Val() : oldConfig?.Checker1,
+                    Approver1 = selectedFieldToUpdate == FIELD_APPROVE_ONE ? (string)FieldData[FIELD_APPROVE_ONE].Val() : oldConfig?.Approver1,
+                    Accountant = selectedFieldToUpdate == FIELD_ACCOUNTANT ? (string)FieldData[FIELD_ACCOUNTANT].Val() : oldConfig?.Accountant,
+                    Payers=oldConfig?.Payers?? new System.Collections.Generic.List<SimplePaymentFlowConfiguration.AccountPayer>(),
                 };
-                //notify the users assinged in the workflow
-                if(config.Checker1!=null && (oldConfig == null || !config.Checker1.Equals(oldConfig.Checker1)))
+
+                //notify the users assigned in the workflow
+                if (config.Checker1!=null && (oldConfig == null || !config.Checker1.Equals(oldConfig.Checker1)))
                     await NotifyCheckerAssignment(bot, config.Checker1,cancellationToken);
                 
 

@@ -22,7 +22,7 @@ namespace TgBot.SmartLedger
         public String filterText = null;
 
         public PaymentListViewer(ChatId chatId, User user
-            , bool activeOnly, string filterText = null
+            , bool activeOnly=true, string filterText = null
             )
         {
             this.chatId = chatId;
