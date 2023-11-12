@@ -7,6 +7,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TgBot.SmartLedger.AccountReconciliation;
 
 namespace TgBot.SmartLedger
 {
@@ -70,11 +71,11 @@ namespace TgBot.SmartLedger
                     ;
             return html;
         }
-        public override async Task<DialogResult> HandleCallBackAsync(ITelegramBotClient bot, CallbackQuery callBack, CancellationToken cancelationToken)
+        public override async Task<DialogResult> HandleCallBackAsync(ITelegramBotClient bot, CallbackQuery callBack, CancellationToken cancellationToken)
         {
             if(this.ModifyDialog!=null)
             {
-                switch(await this.ModifyDialog.HandleCallBackAsync(bot, callBack, cancelationToken))
+                switch(await this.ModifyDialog.HandleCallBackAsync(bot, callBack, cancellationToken))
                 {
                     case DialogResult.Handled:
                         return DialogResult.Handled;
@@ -85,11 +86,15 @@ namespace TgBot.SmartLedger
                         return DialogResult.Handled;
                 }
             }
-            if("Modify".Equals(callBack.Data))
+            switch (callBack.Data)
             {
-                this.ModifyDialog = new ModifyCashAccountDialog(this.chatId, this.user, this.SelectedAccount.Id);
-                await this.ModifyDialog.StartAsync(bot, cancelationToken);
-                return DialogResult.Handled;
+                case "Modify":
+                    this.ModifyDialog = new ModifyCashAccountDialog(this.chatId, this.user, this.SelectedAccount.Id);
+                    await this.ModifyDialog.StartAsync(bot, cancellationToken);
+                    return DialogResult.Handled;
+                case "Reconcile":
+                    await TGBot.PushDialog(this.user.Id.ToString(), new AccountReconciliationDialog(this.chatId, this.user, this.SelectedAccount.Id), cancellationToken);
+                    break;
             }
             return DialogResult.Continue;
         }
@@ -113,10 +118,9 @@ namespace TgBot.SmartLedger
             {
                 if(n>=1 && n<=Accounts.Count)
                 {
-
-
                     this.SelectedAccount = this.Accounts[n - 1];
                     await DisplayAccountDetail(bot);
+                    return DialogResult.Handled;
                 }
             }
             return DialogResult.Continue;
@@ -124,23 +128,24 @@ namespace TgBot.SmartLedger
 
         private async Task DisplayAccountDetail(ITelegramBotClient bot)
         {
-            var e = new SmartLedgerService().GetEntity();
+            
+            var service = new SmartLedgerService();
+            var e = service.GetEntity();
+            var buttons = new List<InlineKeyboardButton[]>();
             if (e != null && e.Owner.Equals(user.Id.ToString()))
             {
-
-                await bot.SendTextMessageAsync(chatId,
-                    text: FormatAccountDetail(this.SelectedAccount),
-                    parseMode: ParseMode.Html,
-                    replyMarkup: FormDialog.CreateInlineButtons(new[] { new KeyValuePair<String, String>("Modify", "Modify") })
-                    );
-
+                buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("Modify", "Modify") });
             }
-            else
+            var conf = service.GetRuleData<SimplePaymentFlowConfiguration>();
+            if (conf!=null && conf.Accountant==user.Id.ToString())
             {
-                await bot.SendTextMessageAsync(chatId,
-                text: FormatAccountDetail(this.SelectedAccount),
-                parseMode: ParseMode.Html);
+                buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("Reconcile", "Reconcile") });
             }
+            var replyMarkup = new InlineKeyboardMarkup(buttons);
+            await bot.SendTextMessageAsync(chatId,
+                text: FormatAccountDetail(this.SelectedAccount),
+                parseMode: ParseMode.Html,
+                replyMarkup: replyMarkup);
         }
 
         async Task ShowPageAsync(ITelegramBotClient bot,int index, CancellationToken cancelationToken)

@@ -55,11 +55,11 @@ namespace TgBot
                 //con = "server=api.webirr.com; database=WeTT;Trusted_Connection=False;User ID=WeFundUser;Password=YaBerYtmjuadQwEK";
                 //con = "server=api.webirr.com,4534;database=SocialLedger;Trusted_Connection=false;User Id=SocialLedgerUser;Password=jtr48mSYFR9DKb2Edd";
 
-                //con = "server=DESKTOP-0N0TOMS\\MSSQLSERVER2017; database=IntapsPayment;Trusted_Connection=True;";
+                con = "server=localhost\\MSSQLSERVER02; database=IntapsPay;Trusted_Connection=True;";
                 //con = "server=64.225.3.202;database=IntapsPay;Trusted_Connection=false;User Id=IntapsPayment;Password=KkVX9YZJ";
                 //con = "server=api.webirr.com,4534; database=WeBirrTask;Trusted_Connection=False;User ID=WeBirrTask;Password=j2R-mBy?LEwV^?UX";  //webirr task
                 
-                con = "User ID=postgres;Password=admin;Server=localhost;Port=5432;Database=Exchange;Integrated Security=false;Pooling=true;";
+                //con = "User ID=postgres;Password=admin;Server=localhost;Port=5432;Database=Exchange;Integrated Security=false;Pooling=true;";
             }
             return con;
         }

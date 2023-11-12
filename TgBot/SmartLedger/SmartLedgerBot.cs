@@ -352,17 +352,17 @@ namespace TgBot.SmartLedger
             {
                 var msg = update.Message;
                 var msgTxt = msg.Text.Trim();
-                bool taxCodeQuery = false;
-                foreach (var pr in new[] { Payment.PR_REF_PREFIX,Payment.DR_REF_PREFIX,Payment.TR_REF_PREFIX })
+                bool codeQuery = false;
+                foreach (var pr in new[] { Payment.PR_REF_PREFIX,Payment.DR_REF_PREFIX,Payment.TR_REF_PREFIX,WorkFlowState.GEN_REF_PREFIX })
                 {
                     if (msgTxt.StartsWith(pr, StringComparison.CurrentCultureIgnoreCase) ||
                         msgTxt.StartsWith("/" + pr, StringComparison.CurrentCultureIgnoreCase))
                     {
-                        taxCodeQuery = true;
+                        codeQuery = true;
                         break;
                     }
                 }
-                if (taxCodeQuery)
+                if (codeQuery)
                 {
                     string taskCode;
                     if (msgTxt.StartsWith("/"))
@@ -371,10 +371,17 @@ namespace TgBot.SmartLedger
                         taskCode = msgTxt.Trim();
                     taskCode = taskCode.Replace(" ", "");
                     var service = new SmartLedgerService();
+                    
                     var payment = service.GetPaymentByRef(taskCode);
                     if (payment != null)
                     {
                         await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentDetailDialog(msg.Chat.Id, msg.From, payment.Id), cancellationToken);
+                        return true;
+                    }
+                    var reconciliation= service.GetReconciliationByRef(taskCode);
+                    if(reconciliation != null)
+                    {
+                        await TGBot.PushDialog(msg.From.Id.ToString(), new ReconciliationDetailDialog(msg.Chat.Id, msg.From, reconciliation.Id), cancellationToken);
                         return true;
                     }
                 }

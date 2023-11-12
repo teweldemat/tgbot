@@ -274,6 +274,8 @@ namespace TgBot.SmartLedger
             => DbRead(db => GetPaymentInternal(db, paymentId));
         public Payment GetPaymentByRef(String pref)
             => DbRead(db => GetPaymentByRefInternal(db, pref));
+        public Reconciliation GetReconciliationByRef(String pref)
+            => DbRead(db => GetReconciliationByRefInternal(db, pref));
         private Payment GetPaymentInternal(SmartLedgerDb db, Guid paymentId)
         {
             return db.Payments.AsNoTracking().Where(x => x.Id == paymentId).FirstOrDefault();
@@ -287,6 +289,10 @@ namespace TgBot.SmartLedger
         private Payment GetPaymentByRefInternal(SmartLedgerDb db, String pref)
         {
             return db.Payments.AsNoTracking().Where(x => x.Reference.ToLower().Equals(pref.ToLower())).FirstOrDefault();
+        }
+        private Reconciliation GetReconciliationByRefInternal(SmartLedgerDb db, String pref)
+        {
+            return db.Reconciliations.AsNoTracking().Where(x => x.Reference.ToLower().Equals(pref.ToLower())).FirstOrDefault();
         }
         public Guid CreatePaymentFlow(String userId,
             String note,
@@ -570,7 +576,12 @@ namespace TgBot.SmartLedger
                 Remark = $"Change for request: {reconciliation.Note}({reconciliation.Reference})"
             };
             var entries = new List<CashLedgerEntry>();
-
+            if(entity.TransactionHead!=null)
+            {
+                var h = db.CashLedgerEntries.First(e => e.TransactionId== entity.TransactionHead.Value);
+                if (h.Time > time)
+                    throw new InvalidOperationException("The reconciliation can't be applied as transactions are performed after the reconciliation time");
+            }
             var account = this.GetCashAccount(reconciliation.AccountId);
             
             entries.Add(new CashLedgerEntry

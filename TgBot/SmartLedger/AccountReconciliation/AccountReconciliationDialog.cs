@@ -22,7 +22,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
         {
             this.AccountId = accountId;
         }
-
+        public override string FirstField => FIELD_BALANCE;
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
             var service = new SmartLedgerService();
@@ -40,7 +40,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
                }).ToList()
            );
 
-            var payment = service.GetPayment(guid);
+            var econciliation = service.GetReconciliation(guid);
             try
             {
                 await bot.SendTextMessageAsync(chatId, "Account reconciliation request is registered.");
@@ -56,7 +56,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
                 var account = service.GetCashAccount(this.AccountId);
 
                 await SmartLedgerBot.NotifyGroups(bot, $"{TGBot.FullName(from)} requested balance of account {account.Name} to be reset to {System.Web.HttpUtility.HtmlEncode(IntData.toString(this.Balance()))} Birr"
-                    + $"<pre>\n</pre> {SmartLedgerBot.ReconciliationLink(payment.Id, payment.Reference)}", true, cancellationToken);
+                    + $"<pre>\n</pre> {SmartLedgerBot.ReconciliationLink(econciliation.Id, econciliation.Reference)}", true, cancellationToken);
                 var config = new SmartLedgerService().GetRuleData<SimplePaymentFlowConfiguration>();
                 if (config != null && config.Approver1 != null)
                 {
@@ -73,7 +73,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
             return DialogResult.Terminated;
         }
 
-        public override string FirstField => FIELD_BALANCE;
+        
 
         public override FormDialogField GetFieldDef(string key)
         {
@@ -84,7 +84,25 @@ namespace TgBot.SmartLedger.AccountReconciliation
                     {
                         Prompt = "What is the balance of the account?",
                         FieldType = FieldType.Text,
-                        NextField = d => Task.FromResult(FIELD_ATTACHMENT_PREFIX),
+                        NextField = d => Task.FromResult(FIELD_REMARK),
+                        ParseFunction = (bot, t, c) =>
+                        {
+                            if (double.TryParse(t, out var d))
+                            {
+                                if (d > 0)
+                                {
+                                    return Task.FromResult(new ParseResult
+                                    {
+                                        Data = IntData.toIntMoney(d)
+                                    });
+                                }
+                            }
+                            return Task.FromResult(new ParseResult
+                            {
+                                Error = "Invalid amount"
+                            });
+                        }
+
                     };
                 case FIELD_REMARK:
                     return new FormDialogField
