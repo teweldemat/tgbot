@@ -1,9 +1,11 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
@@ -16,7 +18,8 @@ namespace TgBot.SmartLedger
         const String FIELD_ACOUNT_PAYER = "AccountPayer";
         const String FIELD_ACOUNT_DEPOSITOR = "AccountDepositor";
 
-
+        SmartLedgerService service;
+        TgDbService tgService;
         public override string FirstField => FIELD_ACOUNT_NAME;
 
         public override FormDialogField GetFieldDef(string key)
@@ -81,7 +84,7 @@ namespace TgBot.SmartLedger
                         Prompt = "Who makes payments for this account?",
                         FieldType = FieldType.Choices,
                         NextField = d => Task.FromResult<String>(FIELD_ACOUNT_DEPOSITOR),
-                        Choices= SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
+                        Choices= SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
                     };
                 case FIELD_ACOUNT_DEPOSITOR:
                     return new FormDialogField
@@ -89,18 +92,23 @@ namespace TgBot.SmartLedger
                         Prompt = "Who makes deposits to this account?",
                         FieldType = FieldType.Choices,
                         NextField = d => Task.FromResult<String>(null),
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices()
+                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
                     };
             }
             return null;
         }
-        public AddCashAccountDialog(ChatId chatId, User from) : base(chatId, from)
+        public AddCashAccountDialog(SmartLedgerService service,TgDbService tgService,ChatId chatId, User from) : base(chatId, from)
         {
-
+            this.service = service;
+            this.tgService = tgService;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
             var e = service.GetEntity();
             var userId = from.Id.ToString();
             if (!e.Owner.Equals(userId))
@@ -146,8 +154,8 @@ namespace TgBot.SmartLedger
                  });
 
                 await SmartLedgerBot.RestartAsync(bot, chatId, from, "The account is added", cancellationToken);
-                await SetupFlowDialog.NotifyPayerAssignment(bot, (string)FieldData[FIELD_ACOUNT_PAYER].Val(), null,false,cashAccountId, cancellationToken);
-                await SetupFlowDialog.NotifyPayerAssignment(bot, (string)FieldData[FIELD_ACOUNT_DEPOSITOR].Val(), null, true, cashAccountId, cancellationToken);
+                await SetupFlowDialog.NotifyPayerAssignment(bot,service,tgService, (string)FieldData[FIELD_ACOUNT_PAYER].Val(), null,false,cashAccountId, cancellationToken);
+                await SetupFlowDialog.NotifyPayerAssignment(bot,service,tgService, (string)FieldData[FIELD_ACOUNT_DEPOSITOR].Val(), null, true, cashAccountId, cancellationToken);
                 return DialogResult.Terminated;
             }
             catch (Exception ex)

@@ -8,7 +8,7 @@ using Telegram.Bot.Types;
 
 namespace TgBot.Tasks
 {
-    public class CheckListEditorDialog:BotDialogBase
+    public class CheckListEditorDialog : BotDialogBase
     {
         private const string MI_DELETE = "Delete";
         private const string MI_ORDER = "Order";
@@ -25,18 +25,21 @@ namespace TgBot.Tasks
         public ChatId ChatId { get; set; }
         public int SelectedItem { get; set; } = 0;
         public int messageId { get; set; }
-        public CheckListEditorDialog(ChatId chatId,List<TaskCheckListItem> items)
+        public CheckListEditorDialog(ChatId chatId, List<TaskCheckListItem> items)
         {
             this.ChatId = chatId;
             this.CheckList = items;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
         }
         String ListString()
         {
             if (CheckList == null || !CheckList.Any())
                 return "<Empty Checklist>";
             String ret = null;
-            int n=1;
-            foreach(var item in CheckList)
+            int n = 1;
+            foreach (var item in CheckList)
             {
                 var itemstr = $"/{n}. {(item.DoneTime == null ? "_" : "X")} {item.Name}";
                 n++;
@@ -46,23 +49,25 @@ namespace TgBot.Tasks
         }
         public override async Task<DialogResult> StartAsync(ITelegramBotClient bot, CancellationToken cancelationToken)
         {
-            messageId=(await bot.SendTextMessageAsync(ChatId, ListString(), cancellationToken: cancelationToken)).MessageId;
+            messageId = (await bot.SendTextMessageAsync(ChatId, ListString(), cancellationToken: cancelationToken)).MessageId;
             return DialogResult.Continue;
         }
         async Task UpdateList(ITelegramBotClient bot, CancellationToken cancelationToken)
         {
             await bot.DeleteMessageAsync(ChatId, messageId);
-            this.messageId= (await bot.SendTextMessageAsync(ChatId, ListString(), cancellationToken: cancelationToken)).MessageId;
+            this.messageId = (await bot.SendTextMessageAsync(ChatId, ListString(), cancellationToken: cancelationToken)).MessageId;
         }
-        class CheckListItemMenu:MenuDialogBase
+        class CheckListItemMenu : MenuDialogBase
         {
             public TaskCheckListItem Item { get; set; }
             public String SelectedMenuItem { get; set; }
-            public CheckListItemMenu(ChatId chatId,User from,TaskCheckListItem item):base(chatId,from)
+            public CheckListItemMenu(ChatId chatId, User from, TaskCheckListItem item) : base(chatId, from)
             {
                 this.Item = item;
             }
-
+            public override void SetServices(IServiceProvider services)
+            {
+            }
             protected override IList<FormFieldChoiceItem> Choices => new FormDialog.FormFieldChoiceItem[] {
                                 new(MI_DELETE, "Delete"),
                                 new(MI_ORDER, "Change Order"),
@@ -115,8 +120,8 @@ namespace TgBot.Tasks
                 if (int.TryParse(txt, out index) && index >= 1 && index <= CheckList.Count())
                 {
                     SelectedItem = index;
-                    await SetChildDialog(bot, 
-                        new CheckListItemMenu(message.Chat.Id, message.From, this.CheckList[SelectedItem - 1]), 
+                    await SetChildDialog(bot,
+                        new CheckListItemMenu(message.Chat.Id, message.From, this.CheckList[SelectedItem - 1]),
                         cancellationToken);
                     return DialogResult.Handled;
                 }

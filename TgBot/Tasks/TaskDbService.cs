@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot.Types;
 using TgBot.SmartLedger;
 using static TgBot.FormDialog;
@@ -16,12 +17,17 @@ namespace TgBot.Tasks
             TaskDbService service;
             public CachedObject<Guid, MisTask> Tasks;
             public CachedObject<String, MisUserProfile> Users;
-            public ServiceCache()
+            public ServiceCache(TaskDbService service)
             {
-                this.service = new TaskDbService();
+                this.service = service;
                 this.Tasks = new CachedObject<Guid, MisTask>(x => service.GetTask(x));
                 this.Users = new CachedObject<String, MisUserProfile>(x => service.GetUserProfile(x));
             }
+        }
+        IServiceProvider services;
+        public TaskDbService(IServiceProvider services, SmartLedgerDb db) : base(db)
+        {
+            this.services = services;
         }
         public static IEnumerable<TaskType> TaskTypes(SmartLedger.SmartLedgerDb db)
             => db.TaksTypes.OrderBy(x => x.OrderN).AsEnumerable();
@@ -69,8 +75,7 @@ namespace TgBot.Tasks
         
         public void ParseTaskDeltas(long from,long to, Func<MisTask,AuditRecord,Object,bool> func)
         {
-            using(var db=new SmartLedgerDb())
-            using (var db2 = new SmartLedgerDb())
+            using (var db2 = services.GetService<SmartLedgerDb>())
             {
 
                 var task = new CachedObject<Guid, MisTask>(x => GetTaskInternal(db2, x));

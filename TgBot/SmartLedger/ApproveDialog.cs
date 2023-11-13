@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
@@ -16,16 +18,24 @@ namespace TgBot.SmartLedger
         protected override int WorkType => PaymentWorkItem.WORK_TYPE_CANCELED;
 
         protected override IEnumerable<string> NextStage => null;
-        
-        public ApproveRejectDialog(ChatId chatId, User from, Guid paymentId,bool reversePayment=false) : base(chatId, from, paymentId)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public ApproveRejectDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId, bool reversePayment = false) : base(service,tgService, chatId, from, paymentId)
         {
             this.PaymentId = paymentId;
             this.ReversePayment = reversePayment;
+            this.service = service;
+            this.tgService = tgService;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
         }
         protected override string GroupNotification(string rejecterName, Payment payment)
         {
             return $"{rejecterName} rejected request "
-                    + $"{SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}";
+                    + $"{SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}";
         }
 
         protected override string OwnerNotification(string rejecterName, Payment payment)
@@ -35,7 +45,6 @@ namespace TgBot.SmartLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
 
             service.AddPaymentWorkItem(from.Id.ToString(),
                 new PaymentWorkItem
@@ -43,7 +52,7 @@ namespace TgBot.SmartLedger
                     PaymentId = this.PaymentId,
                     WorkType = this.WorkType,
                     Note = (String)this.FieldData[FIELD_NOTE].Val()
-                },reversePayment:this.ReversePayment);
+                }, reversePayment: this.ReversePayment);
             try
             {
                 await bot.SendTextMessageAsync(chatId, "The request has been canceled.");
@@ -54,7 +63,6 @@ namespace TgBot.SmartLedger
             }
             try
             {
-                var tgService = new TgBot.TgDb.TgDbService();
                 var state = tgService.GetUserState(from.Id.ToString());
                 var prof = service.GetUserProfile(from.Id.ToString());
                 var payment = service.GetPayment(PaymentId);
@@ -62,7 +70,7 @@ namespace TgBot.SmartLedger
                 //notify group
                 var groupNotif = this.GroupNotification(prof.FullName, payment);
                 if (groupNotif != null)
-                    await SmartLedgerBot.NotifyGroups(bot, groupNotif, true, cancellationToken);
+                    await SmartLedgerBot.NotifyGroups(bot,tgService, groupNotif, true, cancellationToken);
 
                 //notify owner
                 var ownerNotification = this.OwnerNotification(prof.FullName, payment);
@@ -81,7 +89,7 @@ namespace TgBot.SmartLedger
                         var user = new User();
                         user.Id = long.Parse(v);
                         user.FirstName = "Unknown";
-                        await TGBot.PushDialog(v, new PaymentDetailDialog(user.Id, user, PaymentId), cancellationToken);
+                        await TGBot.PushDialog(v, new PaymentDetailDialog(service, tgService, user.Id, user, PaymentId), cancellationToken);
                     }
                 }
             }
@@ -99,16 +107,24 @@ namespace TgBot.SmartLedger
         public override string FirstField => FIELD_NOTE;
         public int ApproveType { get; set; }
         public bool SendBankToAccount { get; set; }
-        public ApproveAcceptDialog(ChatId chatId, User from, Guid paymentId,int approveType=PaymentWorkItem.WORK_TYPE_APPROVE) : base(chatId, from)
+        SmartLedgerService service;
+        TgBot.TgDb.TgDbService tgService;
+
+        public ApproveAcceptDialog(SmartLedgerService service, TgBot.TgDb.TgDbService tgService,ChatId chatId, User from, Guid paymentId, int approveType = PaymentWorkItem.WORK_TYPE_APPROVE) : base(chatId, from)
         {
-            var service = new SmartLedgerService();
+            this.service = service;
+            this.tgService = tgService;
             this.ApproveType = approveType;
             this.payment = service.GetPayment(paymentId);
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             if (config == null)
                 throw new UserFriendlyError("Configuration not set");
         }
-
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
         public override FormDialogField GetFieldDef(string key)
         {
             switch (key)
@@ -125,37 +141,35 @@ namespace TgBot.SmartLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
-            var tgService = new TgBot.TgDb.TgDbService();
             var state = tgService.GetUserState(from.Id.ToString());
             var prof = service.GetUserProfile(from.Id.ToString());
 
             service.AddPaymentWorkItem(
-                userId:from.Id.ToString(),
-                work:new PaymentWorkItem
+                userId: from.Id.ToString(),
+                work: new PaymentWorkItem
                 {
-                    PaymentId=this.payment.Id,
-                    WorkType =ApproveType,
-                    Note=(String)this.FieldData[FIELD_NOTE].Val(),
+                    PaymentId = this.payment.Id,
+                    WorkType = ApproveType,
+                    Note = (String)this.FieldData[FIELD_NOTE].Val(),
                 });
             String message;
-            String messageGroup=null;
-            String messageOwner=null;
+            String messageGroup = null;
+            String messageOwner = null;
             try
             {
-                
-                switch(ApproveType)
+
+                switch (ApproveType)
                 {
                     case PaymentWorkItem.WORK_TYPE_CLOSE:
                         message = "Thank you for closing the request.";
                         messageGroup = $"{prof.FullName} closed request "
-                                + $"{SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}";
+                                + $"{SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}";
                         messageOwner = $"{prof.FullName} closed your request /{payment.Reference}";
                         break;
                     case PaymentWorkItem.WORK_TYPE_RESTART:
                         message = "Request restarted.";
                         messageGroup = $"{prof.FullName} restared request "
-                                + $"{SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}";
+                                + $"{SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}";
                         messageOwner = $"{prof.FullName} restared your request /{payment.Reference}";
                         break;
                     case PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_ACCOUNTING:
@@ -172,11 +186,11 @@ namespace TgBot.SmartLedger
                         break;
                     default:
                         message = "Thank you for approving the request.";
-                        messageGroup = $"{prof.FullName} approved request {SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}";
+                        messageGroup = $"{prof.FullName} approved request {SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}";
                         messageOwner = $"{prof.FullName} approved your request /{payment.Reference}";
                         break;
                 }
-                
+
                 await bot.SendTextMessageAsync(chatId, message);
             }
             catch (Exception ex)
@@ -188,7 +202,7 @@ namespace TgBot.SmartLedger
 
                 //notify group
                 if (messageGroup != null)
-                    await SmartLedgerBot.NotifyGroups(bot, messageGroup, true, cancellationToken);
+                    await SmartLedgerBot.NotifyGroups(bot,tgService, messageGroup, true, cancellationToken);
 
                 //notify creator
                 if (messageOwner != null)
@@ -198,7 +212,7 @@ namespace TgBot.SmartLedger
                             cancellationToken: cancellationToken);
 
                 //notify next stage
-                var config = new SmartLedgerService().GetRuleData<SimplePaymentFlowConfiguration>();
+                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
                 if (config != null)
                 {
 
@@ -214,7 +228,7 @@ namespace TgBot.SmartLedger
                                 var user = new User();
                                 user.Id = long.Parse(payer);
                                 user.FirstName = "Unknown";
-                                await TGBot.PushDialog(payer, new PaymentDetailDialog(payer, user, payment.Id), cancellationToken);
+                                await TGBot.PushDialog(payer, new PaymentDetailDialog(service, tgService, payer, user, payment.Id), cancellationToken);
                             }
                             break;
 
@@ -223,7 +237,7 @@ namespace TgBot.SmartLedger
                                 var user = new User();
                                 user.Id = long.Parse(config.Accountant);
                                 user.FirstName = "Unknown";
-                                await TGBot.PushDialog(config.Accountant, new PaymentDetailDialog(config.Accountant, user, payment.Id), cancellationToken);
+                                await TGBot.PushDialog(config.Accountant, new PaymentDetailDialog(service, tgService, config.Accountant, user, payment.Id), cancellationToken);
                             }
                             break;
                         case PaymentWorkItem.WORK_TYPE_RESTART:
@@ -231,7 +245,7 @@ namespace TgBot.SmartLedger
                                 var user = new User();
                                 user.Id = long.Parse(this.payment.Creator);
                                 user.FirstName = "Unknown";
-                                await TGBot.PushDialog(config.Accountant, new PaymentDetailDialog(this.payment.Creator, user, payment.Id), cancellationToken);
+                                await TGBot.PushDialog(config.Accountant, new PaymentDetailDialog(service, tgService, this.payment.Creator, user, payment.Id), cancellationToken);
                             }
                             break;
                         case PaymentWorkItem.WORK_TYPE_CLOSE:

@@ -33,14 +33,17 @@ namespace TgBot.Controllers
         private const int PEF_VERSION = 1;
 
         const double MIN_INDEX_DAYS = 3;
-
+        TaskDbService service;
+        public TasksController(TaskDbService service)
+        {
+            this.service = service;
+        }
         [HttpGet]
         [Route("/task/file/")]
         public IActionResult GetTaskFile(String id)
         {
             try
             {
-                var service = new TaskDbService();
                 var picData = service.GetTaskFile(Guid.Parse(id));
                 if (picData == null || picData.Image == null)
                     throw new Exception("Attachment doesn't exist");
@@ -59,7 +62,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();
                 var picData = service.GetTaskFile(Guid.Parse(id));
                 if (picData == null || picData.Image == null)
                     throw new Exception("Picture doesn't exist");
@@ -158,7 +160,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();                
                 var tasks = service.GetActiveTasks(true,true,null,0, -1,out var n);
                 var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
                 var now = TGBot.Now();
@@ -430,7 +431,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();
                 var taskId = Guid.Parse(id);
                 var task = service.GetTask(taskId);
                 if (task== null)
@@ -504,7 +504,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();
                 var e = service.GetEntity();
                 var users = service.GetAllUserProfiles();
                 var now = TGBot.Now();
@@ -525,7 +524,7 @@ namespace TgBot.Controllers
                             var s=service.GetDutySchedule(x.UserId) as IDutyStationSechdule;
                             if (s != null)
                             {
-                                var span = s.GetOnCurrentOnDutySpan(x.UserId, now);
+                                var span = s.GetOnCurrentOnDutySpan(service, x.UserId, now);
                                 if(span!=null && span.Remote)
                                 {
                                     dstxt += " as remote worker";
@@ -620,7 +619,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();
                 var e = service.GetEntity();
                 var users = service.GetAllUserProfiles();
                 var now = TGBot.Now();
@@ -750,8 +748,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();
-                
                 var ver = service.GetCurrentFRVersion();
                 if (ver != null)
                 {
@@ -1030,7 +1026,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new TaskDbService();
                 var tasks = service.GetActiveTasks(false, true, null, 0, -1, out var m);
                 var points = new List<TaskChartViewModel.TimePoint>();
                 var now = TGBot.Now();

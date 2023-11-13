@@ -8,7 +8,7 @@ using Telegram.Bot.Types;
 
 namespace TgBot
 {
-    public abstract class MenuDialogBase:FormDialog
+    public abstract class MenuDialogBase : FormDialog
     {
         public string SelectedKey { get; set; }
         protected virtual int NButtonCols => 1;
@@ -20,11 +20,11 @@ namespace TgBot
         protected abstract IList<FormFieldChoiceItem> Choices { get; }
 
         public String Prompt { get; set; }
-        public MenuDialogBase():base(null,null)
+        public MenuDialogBase() : base(null, null)
         {
 
         }
-        public MenuDialogBase(ChatId chatId,User from, 
+        public MenuDialogBase(ChatId chatId, User from,
             String prompt = "Choose"
             ) : base(chatId, from)
         {
@@ -39,7 +39,7 @@ namespace TgBot
                 PromptHtml = Prompt,
                 Choices = this.Choices,
                 FieldType = FieldType.Choices,
-                ChoicesCol=NButtonCols,
+                ChoicesCol = NButtonCols,
                 NextField = null
             };
         }
@@ -48,7 +48,7 @@ namespace TgBot
             return OnItemSelected(bot, FieldData[this.FirstField].Val() as string, cancellationToken);
         }
     }
-    public class MenuDialog: MenuDialogBase
+    public class MenuDialog : MenuDialogBase
     {
         public IList<FormFieldChoiceItem> ChoicesList { get; set; }
 
@@ -57,10 +57,13 @@ namespace TgBot
         public MenuDialog(ChatId chatId, User from,
             IList<FormFieldChoiceItem> choices,
                     String prompt = "Choose"
-                    ) : base(chatId, from,prompt)
+                    ) : base(chatId, from, prompt)
         {
             this.Prompt = prompt;
             this.ChoicesList = choices;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
         }
     }
 }

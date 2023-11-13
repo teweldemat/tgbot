@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,11 +7,12 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
 
-    public class AccountDialog: FormDialog
+    public class AccountDialog : FormDialog
     {
         const String FIELD_NOTE = "Note";
         const string FIELD_ATTACHMENT_PREFIX = "Attachment";
@@ -18,10 +20,18 @@ namespace TgBot.SmartLedger
 
         public Payment payment { get; set; }
         public override string FirstField => FIELD_NOTE;
-
-        public AccountDialog(ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        TgDbService tgService;
+        SmartLedgerService service;
+        public override void SetServices(IServiceProvider services)
         {
-            var service = new SmartLedgerService();
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+
+        public AccountDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        {
+            this.tgService = tgService;
+            this.service = service;
             this.payment = service.GetPayment(paymentId);
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             if (config == null)
@@ -69,64 +79,66 @@ namespace TgBot.SmartLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
-            var sources = service.GetPaymentSources(this.payment.Id);
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
+            {
+                var service = serviceProvider.GetService<SmartLedgerService>();
+                var sources = service.GetPaymentSources(this.payment.Id);
 
-            service.AddPaymentWorkItem(from.Id.ToString(),
-                new PaymentWorkItem
+                service.AddPaymentWorkItem(from.Id.ToString(),
+                    new PaymentWorkItem
+                    {
+                        PaymentId = this.payment.Id,
+                        WorkType = PaymentWorkItem.WORK_TYPE_ACCOUNT,
+                        Note = (String)FieldData[FIELD_NOTE].Val(),
+                    },
+                    this.Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
+                    {
+                        Image = x.Image,
+                        ImgeMime = x.ImageMime,
+                        LinkedImage = x.ContentLink,
+                        LinkedImageType = "1"
+                    }).ToList());
+                try
                 {
-                    PaymentId=this.payment.Id,
-                    WorkType = PaymentWorkItem.WORK_TYPE_ACCOUNT,
-                    Note=(String)FieldData[FIELD_NOTE].Val(),
-                }, 
-                this.Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
-                {
-                    Image = x.Image,
-                    ImgeMime = x.ImageMime,
-                    LinkedImage = x.ContentLink,
-                    LinkedImageType = "1"
-                }).ToList());
-            try
-            {
-                await bot.SendTextMessageAsync(chatId, "Thank you for doing the accounting.");
-            }
-            catch (Exception ex)
-            {
-                TGBot.LogException("CRITICAL: Error sending confirmation for accounting", ex);
-            }
-            try
-            {
-                var tgService = new TgBot.TgDb.TgDbService();
-                var state = tgService.GetUserState(from.Id.ToString());
-                var prof = service.GetUserProfile(from.Id.ToString());
-                
-                //notify group
-                await SmartLedgerBot.NotifyGroups(bot, $"{prof.FullName} completed the accounting for the request "
-                    + $"{SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}", true, cancellationToken);
-
-                //notify owner
-                await bot.SendTextMessageAsync(chatId: payment.Creator,
-                        text: $"{prof.FullName} completed the accounting for the request"
-                                + $"/{payment.Reference}",
-                        parseMode: ParseMode.Html,
-                        cancellationToken: cancellationToken);
-                
-                //notify next stage
-                var config = new SmartLedgerService().GetRuleData<SimplePaymentFlowConfiguration>();
-                if (config != null)
-                {
-                    var next = config.Approver1;
-                    var user = new User();
-                    user.Id = long.Parse(next);
-                    user.FirstName = "Unknown";
-                    await TGBot.PushDialog(next, new PaymentDetailDialog(next, user, payment.Id), cancellationToken);
+                    await bot.SendTextMessageAsync(chatId, "Thank you for doing the accounting.");
                 }
+                catch (Exception ex)
+                {
+                    TGBot.LogException("CRITICAL: Error sending confirmation for accounting", ex);
+                }
+                try
+                {
+                    var state = tgService.GetUserState(from.Id.ToString());
+                    var prof = service.GetUserProfile(from.Id.ToString());
+
+                    //notify group
+                    await SmartLedgerBot.NotifyGroups(bot,tgService,  $"{prof.FullName} completed the accounting for the request "
+                        + $"{SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}", true, cancellationToken);
+
+                    //notify owner
+                    await bot.SendTextMessageAsync(chatId: payment.Creator,
+                            text: $"{prof.FullName} completed the accounting for the request"
+                                    + $"/{payment.Reference}",
+                            parseMode: ParseMode.Html,
+                            cancellationToken: cancellationToken);
+
+                    //notify next stage
+                    var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+                    if (config != null)
+                    {
+                        var next = config.Approver1;
+                        var user = new User();
+                        user.Id = long.Parse(next);
+                        user.FirstName = "Unknown";
+                        await TGBot.PushDialog(next, new PaymentDetailDialog(service,tgService, next, user, payment.Id), cancellationToken);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TGBot.LogException("Error notifying groups and relevant users", ex);
+                }
+                return DialogResult.Terminated;
             }
-            catch (Exception ex)
-            {
-                TGBot.LogException("Error notifying groups and relevant users", ex);
-            }
-            return DialogResult.Terminated;
         }
     }
 }

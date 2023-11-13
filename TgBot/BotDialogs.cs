@@ -29,6 +29,7 @@ namespace TgBot
         Task<DialogResult> HandlePaymentAsync(ITelegramBotClient bot,String checkOutCode,CancellationToken cancelationToken);        
         Task<DialogResult> HandleCancel(ITelegramBotClient bot, CancellationToken cancelationToken);
         DialogOverlapPolicy OverlapPolicy { get; }
+        void SetServices(IServiceProvider services);
     }
     public abstract class BotDialogBase : IBotDialog
     {
@@ -130,8 +131,6 @@ namespace TgBot
         }
         public virtual  Task<DialogResult> HandleCallBackAsync(ITelegramBotClient bot, CallbackQuery callBack, CancellationToken cancelationToken)
         {
-            
-
             return Task.FromResult(DialogResult.Continue);
         }
         public virtual  Task<DialogResult> HandleMessageAsync(ITelegramBotClient bot, Message message, CancellationToken cancelationToken)
@@ -154,6 +153,7 @@ namespace TgBot
                 ChildDialog.HandleCancel(bot, cancelationToken);
             return Task.FromResult(DialogResult.Terminated);
         }
-        
+
+        public abstract void SetServices(IServiceProvider services);
     }
 }

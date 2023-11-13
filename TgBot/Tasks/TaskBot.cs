@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -8,6 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger;
+using TgBot.TgDb;
 
 namespace TgBot.Tasks
 {
@@ -50,109 +52,124 @@ namespace TgBot.Tasks
             ChatId chatId, User from, String message,
             CancellationToken cancellationToken)
         {
-            var service = new TaskDbService();
-            var prof = service.GetUserProfile(from.Id.ToString());
-            if (prof == null)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                await bot.SendTextMessageAsync(
-                chatId: chatId,
-                text: "Welcome");
-                await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(chatId, from), cancellationToken);
-                return true;
-            }
-            var entity = service.GetEntity();
-            if (entity == null)
-            {
-                await bot.SendTextMessageAsync(
-                chatId: chatId,
-                text: "Welcome.");
-                await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog<SmartLedgerDb>(chatId, from), cancellationToken);
-                return true;
-            }
+                var service = serviceProvider.GetService<TaskDbService>();
+                var prof = service.GetUserProfile(from.Id.ToString());
+                if (prof == null)
+                {
+                    await bot.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: "Welcome");
+                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                    return true;
+                }
+                var entity = service.GetEntity();
+                if (entity == null)
+                {
+                    await bot.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: "Welcome.");
+                    await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                    return true;
+                }
 
-            var buttons = new List<KeyboardButton[]>();
-            if (prof.Permitted)
-            {
-                var ds = service.GetUserDutyStation(from.Id.ToString(), TGBot.Now());
-                buttons.Add(new KeyboardButton[] { MAIN_CREATE_TASK });
-                if (ds != null)
-                    buttons.Add(new KeyboardButton[] { MAIN_DUTY_STATION });
+                var buttons = new List<KeyboardButton[]>();
+                if (prof.Permitted)
+                {
+                    var ds = service.GetUserDutyStation(from.Id.ToString(), TGBot.Now());
+                    buttons.Add(new KeyboardButton[] { MAIN_CREATE_TASK });
+                    if (ds != null)
+                        buttons.Add(new KeyboardButton[] { MAIN_DUTY_STATION });
 
-                buttons.Add(new KeyboardButton[] { MAIN_LIST_TASKS });
-                buttons.Add(new KeyboardButton[] { MAIN_SETTING });
-            }
-            var replyKeyboardMarkup = new ReplyKeyboardMarkup(buttons,
-                    resizeKeyboard: true
+                    buttons.Add(new KeyboardButton[] { MAIN_LIST_TASKS });
+                    buttons.Add(new KeyboardButton[] { MAIN_SETTING });
+                }
+                var replyKeyboardMarkup = new ReplyKeyboardMarkup(buttons,
+                        resizeKeyboard: true
+                    );
+
+                await bot.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: message,
+                    replyMarkup: replyKeyboardMarkup
                 );
-
-            await bot.SendTextMessageAsync(
-                chatId: chatId,
-                text: message,
-                replyMarkup: replyKeyboardMarkup
-            );
-            return true;
+                return true;
+            }
         }
 
-        internal static async Task StartPlannedTask(ITelegramBotClient bot, CancellationToken cancellationToken,
+        internal static async Task StartPlannedTask(ITelegramBotClient bot, TgDbService tgService, CancellationToken cancellationToken,
             ChatId chatId, User user, Guid taskID)
         {
-            var service = new TaskDbService();
-            var task = service.GetTask(taskID);
-            var prof = service.GetUserProfile(user.Id.ToString());
-            service.StartTask(user.Id.ToString(), taskID);
-            var message = $"{prof.FullName} started planned task {task.CodeName}";
-            await NotifyTaskChange(bot, cancellationToken, task, message, false);
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
+            {
+                var service = serviceProvider.GetService<TaskDbService>();
+                var task = service.GetTask(taskID);
+                var prof = service.GetUserProfile(user.Id.ToString());
+                service.StartTask(user.Id.ToString(), taskID);
+                var message = $"{prof.FullName} started planned task {task.CodeName}";
+                await NotifyTaskChange(bot, tgService, cancellationToken, task, message, false);
+            }
         }
 
-        private static async Task NotifyTaskChange(ITelegramBotClient bot, CancellationToken cancellationToken, MisTask task, string message, bool html)
+        private static async Task NotifyTaskChange(ITelegramBotClient bot, TgDbService tgService, CancellationToken cancellationToken, MisTask task, string message, bool html)
         {
-            await NotifyGroups(bot, message, html, cancellationToken);
+            await NotifyGroups(bot, tgService, message, html, cancellationToken);
         }
         internal static async Task NotifyFollower(ITelegramBotClient bot, Guid taskId, String message, bool html, CancellationToken cancellationToken)
         {
-            var service = new TaskDbService();
-            var followers = service.GetTaskUsers(taskId, TaskUserRole.Follower);
-            foreach (var follower in followers)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                await bot.SendTextMessageAsync(
-                        chatId: follower.UserId,
-                        text: message,
-                        parseMode: html ? ParseMode.Html : ParseMode.Default
-                    );
+                var service = serviceProvider.GetService<TaskDbService>();
+                var followers = service.GetTaskUsers(taskId, TaskUserRole.Follower);
+                foreach (var follower in followers)
+                {
+                    await bot.SendTextMessageAsync(
+                            chatId: follower.UserId,
+                            text: message,
+                            parseMode: html ? ParseMode.Html : ParseMode.Default
+                        );
+                }
             }
         }
         internal static async Task NotifyWorkers(ITelegramBotClient bot, Guid taskId, String message, CancellationToken cancellationToken)
         {
-            var service = new TaskDbService();
-            var followers = service.GetTaskUsers(taskId, TaskUserRole.Worker);
-            foreach (var follower in followers)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                await NotifyUser(bot, follower.UserId, message, cancellationToken);
+                var service = serviceProvider.GetService<TaskDbService>();
+                var followers = service.GetTaskUsers(taskId, TaskUserRole.Worker);
+                foreach (var follower in followers)
+                {
+                    await NotifyUser(bot, follower.UserId, message, cancellationToken);
+                }
             }
         }
         internal static async Task NotifyWorkersAndFollowers(ITelegramBotClient bot, Guid taskId, String message, String self, CancellationToken cancellationToken)
         {
-            var service = new TaskDbService();
-            foreach (var follower in service.GetTaskUsers(taskId, TaskUserRole.Worker))
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                if (follower.UserId.Equals(self))
-                    continue;
-                await NotifyUser(bot, follower.UserId, message, cancellationToken);
-            }
-            foreach (var follower in service.GetTaskUsers(taskId, TaskUserRole.Follower))
-            {
-                if (follower.UserId.Equals(self))
-                    continue;
-                await NotifyUser(bot, follower.UserId, message, cancellationToken);
+                var service = serviceProvider.GetService<TaskDbService>();
+                foreach (var follower in service.GetTaskUsers(taskId, TaskUserRole.Worker))
+                {
+                    if (follower.UserId.Equals(self))
+                        continue;
+                    await NotifyUser(bot, follower.UserId, message, cancellationToken);
+                }
+                foreach (var follower in service.GetTaskUsers(taskId, TaskUserRole.Follower))
+                {
+                    if (follower.UserId.Equals(self))
+                        continue;
+                    await NotifyUser(bot, follower.UserId, message, cancellationToken);
+                }
             }
         }
-        internal static Task NotifyGroups(ITelegramBotClient bot, String message, CancellationToken cancellationToken)
-            => NotifyGroups(bot, message, true, cancellationToken);
-        internal static async Task NotifyGroups(ITelegramBotClient bot, String message, bool html, CancellationToken cancellationToken)
+        internal static Task NotifyGroups(ITelegramBotClient bot, TgDbService tgService, String message, CancellationToken cancellationToken)
+            => NotifyGroups(bot, tgService, message, true, cancellationToken);
+        internal static async Task NotifyGroups(ITelegramBotClient bot, TgDbService tgService, String message, bool html, CancellationToken cancellationToken)
         {
             try
             {
-                foreach (var g in new TgDb.TgDbService().GetAllJoinedTGGroups(TGBot.BotToken))
+                foreach (var g in tgService.GetAllJoinedTGGroups(TGBot.BotToken))
                 {
                     await bot.SendTextMessageAsync(
                             chatId: g.TgGroupId,
@@ -196,13 +213,13 @@ namespace TgBot.Tasks
             await TGBot.ClearDialogAsync(bot, chatId, tgUserID, cancellationToken);
             return true;
         }
-        public class PerformanceReportMenu:BotDialogBase
+        public class PerformanceReportMenu : BotDialogBase
         {
-            
+
             const String FIELD_TYPE = "Type";
             const String DATE_FROM = "From";
             const String DATE_TO = "To";
-            
+
             const String TYPE_TODAY = "Today";
             const String TYPE_YESTERDAY = "Yesterday";
             const String TYPE_LAST_ONE_WEEK = "LastWeek";
@@ -215,19 +232,21 @@ namespace TgBot.Tasks
             public long From;
             public long To;
             public int messageId;
-            public PerformanceReportMenu(ChatId chatId) 
+            public PerformanceReportMenu(ChatId chatId)
             {
                 this.ChatId = chatId;
             }
-            
+            public override void SetServices(IServiceProvider services)
+            {
+            }
             public override async Task<DialogResult> HandleCancel(ITelegramBotClient bot, CancellationToken cancelationToken)
             {
                 await base.HandleCancel(bot, cancelationToken);
                 try
                 {
-                    await bot.EditMessageReplyMarkupAsync(ChatId,messageId);
+                    await bot.EditMessageReplyMarkupAsync(ChatId, messageId);
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     TGBot.LogException("Error trying to remove buttons", ex);
                 }
@@ -247,16 +266,16 @@ namespace TgBot.Tasks
                 buttons.Add(InlineKeyboardButton.WithUrl("Last Month", $"{TaskBot.WebLinkBaseUrl}/task/changesummary?from={monthStart.AddMonths(-1).Ticks}&to={monthStart.Ticks}"));
                 buttons.Add(InlineKeyboardButton.WithCallbackData("Date Range", DATE_FROM));
                 var twoColumnButtons = new List<InlineKeyboardButton[]>();
-                for(int i=0;i<buttons.Count;i+=2)
+                for (int i = 0; i < buttons.Count; i += 2)
                 {
                     var item1 = i;
                     var item2 = i + 1;
                     if (item2 < buttons.Count)
                         twoColumnButtons.Add(new InlineKeyboardButton[] { buttons[item1], buttons[item2] });
                     else
-                        twoColumnButtons.Add(new InlineKeyboardButton[] { buttons[item1]});
+                        twoColumnButtons.Add(new InlineKeyboardButton[] { buttons[item1] });
                 }
-                messageId=(await bot.SendTextMessageAsync(this.ChatId, "Choose performance report type",
+                messageId = (await bot.SendTextMessageAsync(this.ChatId, "Choose performance report type",
                     replyMarkup: new InlineKeyboardMarkup(twoColumnButtons.ToArray()),
                     cancellationToken: cancelationToken)).MessageId;
                 return DialogResult.Handled;
@@ -276,9 +295,9 @@ namespace TgBot.Tasks
             {
                 if (message.Type != MessageType.Text)
                     return DialogResult.Continue;
-                if(!DateTime.TryParse(message.Text,out var dt))
+                if (!DateTime.TryParse(message.Text, out var dt))
                     await bot.SendTextMessageAsync(this.ChatId, "Please enter valid date", cancellationToken: cancelationToken);
-                switch(CurrentField)
+                switch (CurrentField)
                 {
                     case DATE_FROM:
                         await bot.SendTextMessageAsync(this.ChatId, "Date to?", cancellationToken: cancelationToken);
@@ -296,10 +315,10 @@ namespace TgBot.Tasks
                         {
                             this.To = dt.AddDays(1).Ticks;
                             await bot.SendTextMessageAsync(this.ChatId, $"<a href=\"{TaskBot.WebLinkBaseUrl}/task/changesummary?from={this.From}&to={this.To}\">Click here to see flow report for dates from {new DateTime(From).Date.ToString("MMM dd,yyy")} to {new DateTime(To).Date.AddDays(-1).ToString("MMM dd,yyy")}</a>",
-                                parseMode:ParseMode.Html,
+                                parseMode: ParseMode.Html,
                                 cancellationToken: cancelationToken);
                             return DialogResult.Terminated;
-                        }                        
+                        }
 
                 }
                 return DialogResult.Continue;
@@ -313,74 +332,85 @@ namespace TgBot.Tasks
             {
 
             }
+            public override void SetServices(IServiceProvider services)
+            {
+            }
             protected override int NButtonCols => 2;
             protected override IList<FormFieldChoiceItem> Choices
             {
                 get
                 {
-                    var service = new TaskDbService();
-                    var entity = service.GetEntity();
-                    bool isOwner = entity.Owner.Equals(this.from.Id.ToString());
-                    var config = service.GetTaskConfiguration<TaskConfigurationData>();
-                    var flowConfigured = config != null;
-                    var isHrManager = config != null && config.HRManager.Equals(this.from.Id.ToString());
-
-                    var choices = new List<FormDialog.FormFieldChoiceItem>();
-                    if (isHrManager || isOwner)
+                    using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
                     {
-                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_ADD_DUTY_STATION, "Add Duty Station"));
+                        var service = serviceProvider.GetService<TaskDbService>();
+                        var entity = service.GetEntity();
+                        bool isOwner = entity.Owner.Equals(this.from.Id.ToString());
+                        var config = service.GetTaskConfiguration<TaskConfigurationData>();
+                        var flowConfigured = config != null;
+                        var isHrManager = config != null && config.HRManager.Equals(this.from.Id.ToString());
+
+                        var choices = new List<FormDialog.FormFieldChoiceItem>();
+                        if (isHrManager || isOwner)
+                        {
+                            choices.Add(new FormDialog.FormFieldChoiceItem(MI_ADD_DUTY_STATION, "Add Duty Station"));
+                        }
+                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_LIST_DUTY_STATIONS, "List Duty Stations"));
+                        if (isOwner)
+                            choices.Add(new FormDialog.FormFieldChoiceItem(MI_SETUP_FLOW, "Setup HR Flow"));
+                        if ((isHrManager || isOwner) && service.DutyStationsCount() > 0)
+                            choices.Add(new FormDialog.FormFieldChoiceItem(MI_ASSIGN_DS, "Assign Duty Station"));
+                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_STATUS_REPORTS, "Status Reports"));
+                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_FLOW_REPORTS, "Task Flow Reports"));
+                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_SET_USER_PROFILE, "Set Name"));
+                        return choices;
                     }
-                    choices.Add(new FormDialog.FormFieldChoiceItem(MI_LIST_DUTY_STATIONS, "List Duty Stations"));
-                    if (isOwner)
-                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_SETUP_FLOW, "Setup HR Flow"));
-                    if ((isHrManager || isOwner) && service.DutyStationsCount() > 0)
-                        choices.Add(new FormDialog.FormFieldChoiceItem(MI_ASSIGN_DS, "Assign Duty Station"));
-                    choices.Add(new FormDialog.FormFieldChoiceItem(MI_STATUS_REPORTS, "Status Reports"));
-                    choices.Add(new FormDialog.FormFieldChoiceItem(MI_FLOW_REPORTS, "Task Flow Reports"));
-                    choices.Add(new FormDialog.FormFieldChoiceItem(MI_SET_USER_PROFILE, "Set Name"));
-                    return choices;
                 }
             }
 
             protected override async Task<DialogResult> OnItemSelected(ITelegramBotClient bot, string key, CancellationToken cancellationToken)
             {
-                switch (key)
+                using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
                 {
-                    case MI_ADD_DUTY_STATION:
-                        await TGBot.PushDialog(from.Id.ToString(), new AddDutyStationDialog(chatId, from), cancellationToken);
-                        return DialogResult.Terminated;
-                    case MI_SET_USER_PROFILE:
-                        await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(chatId, from), cancellationToken);
-                        return DialogResult.Terminated;
-                    case MI_SETUP_FLOW:
-                        await TGBot.PushDialog(from.Id.ToString(), new SetTaskFlowDialog(chatId, from), cancellationToken);
-                        return DialogResult.Terminated;
-                    case MI_LIST_DUTY_STATIONS:
-                        await TGBot.PushDialog(from.Id.ToString(), new DutyStationListViewer(chatId, from), cancellationToken);
-                        return DialogResult.Terminated;
-                    case MI_ASSIGN_DS:
-                        await TGBot.PushDialog(from.Id.ToString(), new AssignDutyStationDialog(chatId, from), cancellationToken);
-                        return DialogResult.Terminated;
-                    case MI_STATUS_REPORTS:
-                        await bot.SendTextMessageAsync(
-                            chatId: this.chatId,
-                            text: "Select Report Type",
-                            replyMarkup: new InlineKeyboardMarkup(new[] {
+                    var service = serviceProvider.GetService<TaskDbService>();
+                    var tgService = serviceProvider.GetService<TgDbService>();
+                    switch (key)
+                    {
+                        case MI_ADD_DUTY_STATION:
+                            await TGBot.PushDialog(from.Id.ToString(), new AddDutyStationDialog(service, tgService,chatId, from), cancellationToken);
+                            return DialogResult.Terminated;
+                        case MI_SET_USER_PROFILE:
+                            await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                            return DialogResult.Terminated;
+                        case MI_SETUP_FLOW:
+                            await TGBot.PushDialog(from.Id.ToString(), new SetTaskFlowDialog(service,tgService, chatId, from), cancellationToken);
+                            return DialogResult.Terminated;
+                        case MI_LIST_DUTY_STATIONS:
+                            await TGBot.PushDialog(from.Id.ToString(), new DutyStationListViewer(service, chatId, from), cancellationToken);
+                            return DialogResult.Terminated;
+                        case MI_ASSIGN_DS:
+                            await TGBot.PushDialog(from.Id.ToString(), new AssignDutyStationDialog(service, chatId, from), cancellationToken);
+                            return DialogResult.Terminated;
+                        case MI_STATUS_REPORTS:
+                            await bot.SendTextMessageAsync(
+                                chatId: this.chatId,
+                                text: "Select Report Type",
+                                replyMarkup: new InlineKeyboardMarkup(new[] {
                                 new[] { InlineKeyboardButton.WithUrl("Team Status", $"{WebLinkBaseUrl}/task/team")
                                 , InlineKeyboardButton.WithUrl("My Status", $"{WebLinkBaseUrl}/task/user?userid={this.from.Id.ToString()}")}
-                                ,new[] { 
+                                ,new[] {
                                     InlineKeyboardButton.WithUrl("Tasks List", $"{WebLinkBaseUrl}/task/activetasks")
                                 ,InlineKeyboardButton.WithUrl("Visualize", $"{WebLinkBaseUrl}/task/planchart")
                                 }
-                            }),
-                            cancellationToken: cancellationToken);
-                        return DialogResult.Terminated;
-                    case MI_FLOW_REPORTS:
-                        await TGBot.PushDialog(from.Id.ToString(), new PerformanceReportMenu(chatId), cancellationToken);
-                        return DialogResult.Terminated;
+                                }),
+                                cancellationToken: cancellationToken);
+                            return DialogResult.Terminated;
+                        case MI_FLOW_REPORTS:
+                            await TGBot.PushDialog(from.Id.ToString(), new PerformanceReportMenu(chatId), cancellationToken);
+                            return DialogResult.Terminated;
 
+                    }
+                    return DialogResult.Terminated;
                 }
-                return DialogResult.Terminated;
             }
         }
 
@@ -390,6 +420,9 @@ namespace TgBot.Tasks
                 base(chatId, from)
             {
 
+            }
+            public override void SetServices(IServiceProvider services)
+            {
             }
             protected override int NButtonCols => 2;
             protected override IList<FormFieldChoiceItem> Choices
@@ -408,7 +441,7 @@ namespace TgBot.Tasks
                 switch (key)
                 {
                     case MI_MY_TASKS:
-                        await TGBot.PushDialog(this.from.Id.ToString(), new TaskListViewer(this.chatId, this.from, true,this.from.Id.ToString() ), cancellationToken);
+                        await TGBot.PushDialog(this.from.Id.ToString(), new TaskListViewer(this.chatId, this.from, true, this.from.Id.ToString()), cancellationToken);
                         return DialogResult.Terminated;
                     case MI_ALL_TASKS:
                         await TGBot.PushDialog(this.from.Id.ToString(), new TaskListViewer(this.chatId, this.from, true), cancellationToken);
@@ -421,86 +454,90 @@ namespace TgBot.Tasks
 
         public async Task<bool> HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            switch (update.Type)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                case UpdateType.CallbackQuery:
-                    break;
-                case UpdateType.Message:
-                    var msg = update.Message;
-                    if (msg == null
-                        || msg.Chat == null
-                        || msg.From == null
-                        || msg.From.IsBot
-                        )
-                        return false;
-                    var service = new TaskDbService();
-                    var state = new TgDb.TgDbService().GetOrCreateUser(msg.From.Id.ToString());
-                    if (msg.Chat.Type == ChatType.Private)
-                    {
-                        if (msg.Text != null)
+                var service = serviceProvider.GetService<TaskDbService>();
+                var tgService = serviceProvider.GetService<TgDbService>();
+                switch (update.Type)
+                {
+                    case UpdateType.CallbackQuery:
+                        break;
+                    case UpdateType.Message:
+                        var msg = update.Message;
+                        if (msg == null
+                            || msg.Chat == null
+                            || msg.From == null
+                            || msg.From.IsBot
+                            )
+                            return false;
+                        var state = tgService.GetOrCreateUser(msg.From.Id.ToString());
+                        if (msg.Chat.Type == ChatType.Private)
                         {
-                            if (msg.Text.StartsWith("/start", StringComparison.CurrentCultureIgnoreCase))
+                            if (msg.Text != null)
                             {
-                                var parts = msg.Text.Split(' ');
-                                if (parts.Length == 1)
+                                if (msg.Text.StartsWith("/start", StringComparison.CurrentCultureIgnoreCase))
                                 {
-                                    if (await ProcessStart(botClient, msg.Chat.Id, msg.From, "What do you want to do?", cancellationToken))
+                                    var parts = msg.Text.Split(' ');
+                                    if (parts.Length == 1)
+                                    {
+                                        if (await ProcessStart(botClient, msg.Chat.Id, msg.From, "What do you want to do?", cancellationToken))
+                                            return true;
+                                    }
+                                }
+                                if (MI_SET_USER_PROFILE.Equals(msg.Text))
+                                {
+                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, msg.Chat.Id, msg.From), cancellationToken);
+                                    return true;
+                                }
+
+                                //from this onward only permited users
+                                var user = service.GetUserProfile(msg.From.Id.ToString());
+                                if (user == null || !user.Permitted)
+                                    return false;
+
+                                if (msg.Text.Equals("/cancel", StringComparison.CurrentCultureIgnoreCase))
+                                {
+                                    if (await ProcessCancel(botClient, msg.Chat.Id, msg.From.Id.ToString(), cancellationToken))
+                                        return true;
+                                }
+
+                                if (msg.Text.StartsWith("/fr_cuttoff"))
+                                {
+                                    if (ProcessFRCuttoff(msg, service))
+                                        return true;
+                                }
+
+                                switch (msg.Text)
+                                {
+                                    case MAIN_SETTING:
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new AdvancedMenu(
+                                            msg.Chat.Id,
+                                            msg.From), cancellationToken);
+                                        return true;
+
+                                    case MAIN_PING_WORKER:
+                                        await PingTask(service, service.GetUserProfile(msg.From.Id.ToString()));
+                                        return true;
+                                    case MAIN_CREATE_TASK:
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new CreateTaskDialog(service, tgService,
+                                            msg.Chat.Id,
+                                            msg.From,
+                                            startImmidiately: false
+                                            ), cancellationToken);
+                                        return true;
+                                    case MAIN_DUTY_STATION:
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new OnDutyCheckDialog(service, tgService, msg.Chat.Id, msg.From, true), cancellationToken);
+                                        return true;
+                                    case MAIN_LIST_TASKS:
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new TaskListMenu(msg.Chat.Id, msg.From), cancellationToken);
                                         return true;
                                 }
                             }
-                            if (MI_SET_USER_PROFILE.Equals(msg.Text))
-                            {
-                                await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(msg.Chat.Id, msg.From), cancellationToken);
-                                return true;
-                            }
-
-                            //from this onward only permited users
-                            var user = service.GetUserProfile(msg.From.Id.ToString());
-                            if (user == null || !user.Permitted)
-                                return false;
-
-                            if (msg.Text.Equals("/cancel", StringComparison.CurrentCultureIgnoreCase))
-                            {
-                                if (await ProcessCancel(botClient, msg.Chat.Id, msg.From.Id.ToString(), cancellationToken))
-                                    return true;
-                            }
-
-                            if (msg.Text.StartsWith("/fr_cuttoff"))
-                            {
-                                if (ProcessFRCuttoff(msg, service))
-                                    return true;
-                            }
-
-                            switch (msg.Text)
-                            {
-                                case MAIN_SETTING:
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new AdvancedMenu(
-                                        msg.Chat.Id,
-                                        msg.From), cancellationToken);
-                                    return true;
-
-                                case MAIN_PING_WORKER:
-                                    await PingTask(service, service.GetUserProfile(msg.From.Id.ToString()));
-                                    return true;
-                                case MAIN_CREATE_TASK:
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new CreateTaskDialog(
-                                        msg.Chat.Id,
-                                        msg.From,
-                                        startImmidiately: false
-                                        ), cancellationToken);
-                                    return true;
-                                case MAIN_DUTY_STATION:
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new OnDutyCheckDialog(msg.Chat.Id, msg.From, true), cancellationToken);
-                                    return true;
-                                case MAIN_LIST_TASKS:
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new TaskListMenu(msg.Chat.Id, msg.From), cancellationToken);
-                                    return true;
-                            }
                         }
-                    }
-                    break;
+                        break;
+                }
+                return false;
             }
-            return false;
         }
 
         private static bool ProcessFRCuttoff(Message msg, TaskDbService service)
@@ -526,91 +563,93 @@ namespace TgBot.Tasks
         }
         public static String FormatTaskDetailHtml(Guid taskId, TaskFormatOptions options)
         {
-
-            var service = new TaskDbService();
-            var p = service.GetTask(taskId);
-            var checkList = service.GetTaskCheckList(taskId);
-            var content = service.GetTaskContents(taskId);
-            var statusString = TaskFullData.StatusString(p);
-            var text = $"<strong>Code</strong> {p.Code}";
-            text += $"<pre>\n</pre><strong>Title</strong> {p.Title}";
-            text += $"<pre>\n</pre><strong>Status:</strong> {statusString}";
-            if (p.PlannedEndTime != null)
-                text += $"<pre>\n</pre><strong>Due time:</strong> {TGBot.ToRelativeTime(p.PlannedEndTime.Value)}";
-            if (!String.IsNullOrEmpty(p.Description))
-                text += $"<pre>\n</pre><strong>Description:</strong>{p.Description}";
-            text += $"<pre>\n</pre><strong>Created by:</strong> {service.GetUserProfile(p.CreatedBy).FullName}";
-            if (p.ParentTaskId != null)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                var parent = service.GetTask(p.ParentTaskId.Value);
-                text += $"<pre>\n</pre><strong>Subtask of:</strong> {parent.Title} /{parent.Code}";
-            }
-            if (checkList.Count > 0)
-            {
-                text += "<pre>\n</pre><strong>Check List</strong>";
-                int n = 1;
-                foreach (var c in checkList)
+                var service = serviceProvider.GetService<TaskDbService>();
+                var p = service.GetTask(taskId);
+                var checkList = service.GetTaskCheckList(taskId);
+                var content = service.GetTaskContents(taskId);
+                var statusString = TaskFullData.StatusString(p);
+                var text = $"<strong>Code</strong> {p.Code}";
+                text += $"<pre>\n</pre><strong>Title</strong> {p.Title}";
+                text += $"<pre>\n</pre><strong>Status:</strong> {statusString}";
+                if (p.PlannedEndTime != null)
+                    text += $"<pre>\n</pre><strong>Due time:</strong> {TGBot.ToRelativeTime(p.PlannedEndTime.Value)}";
+                if (!String.IsNullOrEmpty(p.Description))
+                    text += $"<pre>\n</pre><strong>Description:</strong>{p.Description}";
+                text += $"<pre>\n</pre><strong>Created by:</strong> {service.GetUserProfile(p.CreatedBy).FullName}";
+                if (p.ParentTaskId != null)
                 {
+                    var parent = service.GetTask(p.ParentTaskId.Value);
+                    text += $"<pre>\n</pre><strong>Subtask of:</strong> {parent.Title} /{parent.Code}";
+                }
+                if (checkList.Count > 0)
+                {
+                    text += "<pre>\n</pre><strong>Check List</strong>";
+                    int n = 1;
+                    foreach (var c in checkList)
+                    {
 
-                    text += $"<pre>\n</pre>";
-                    if (options.includeChkCommands)
-                        text += $"<pre> </pre>/chk{n++}";
-                    text += $"<pre> </pre>{(c.DoneTime == null ? "_" : "X")} : {c.Name}";
+                        text += $"<pre>\n</pre>";
+                        if (options.includeChkCommands)
+                            text += $"<pre> </pre>/chk{n++}";
+                        text += $"<pre> </pre>{(c.DoneTime == null ? "_" : "X")} : {c.Name}";
+                    }
+
+                }
+                if (content.Count > 0)
+                {
+                    text += "<pre>\n</pre><strong>Attachments</strong>";
+                    int n = 1;
+                    foreach (var c in content)
+                    {
+                        text += $"<pre>\n</pre>";
+                        if (options.includeAttCommands)
+                            text += $"<pre> </pre>/att{n}";
+                        if (c.LinkType != FormDialog.ContentLinkType.Url)
+                            text += $"<pre> </pre><a href=\"{WebLinkBaseUrl}/task/file?id={c.Id}\">{(String.IsNullOrEmpty(c.Caption) ? "Attachment " + n : c.Caption)}</a>";
+                        else
+                            text += $"<pre> </pre><a href=\"{c.ContentLink}\">{(String.IsNullOrEmpty(c.Caption) ? "Attachment " + n : c.Caption)}</a>";
+                        n++;
+                    }
                 }
 
-            }
-            if (content.Count > 0)
-            {
-                text += "<pre>\n</pre><strong>Attachments</strong>";
-                int n = 1;
-                foreach (var c in content)
+                var subtasks = service.GetSubTasks(taskId);
+                if (subtasks.Count > 0)
                 {
-                    text += $"<pre>\n</pre>";
-                    if (options.includeAttCommands)
-                        text += $"<pre> </pre>/att{n}";
-                    if (c.LinkType != FormDialog.ContentLinkType.Url)
-                        text += $"<pre> </pre><a href=\"{WebLinkBaseUrl}/task/file?id={c.Id}\">{(String.IsNullOrEmpty(c.Caption) ? "Attachment " + n : c.Caption)}</a>";
-                    else
-                        text += $"<pre> </pre><a href=\"{c.ContentLink}\">{(String.IsNullOrEmpty(c.Caption) ? "Attachment " + n : c.Caption)}</a>";
-                    n++;
+                    text += "<pre>\n</pre><strong>Subtasks</strong>";
+                    foreach (var c in subtasks)
+                    {
+                        text += $"<pre>\n</pre>/{c.Code} {c.Title} ({TaskFullData.StatusString(c)})";
+                    }
                 }
-            }
-            
-            var subtasks = service.GetSubTasks(taskId);
-            if (subtasks.Count > 0)
-            {
-                text += "<pre>\n</pre><strong>Subtasks</strong>";
-                foreach (var c in subtasks)
+                int commentCount = service.GetTaskCommentCount(taskId);
+                if (commentCount > 0)
                 {
-                    text += $"<pre>\n</pre>/{c.Code} {c.Title} ({TaskFullData.StatusString(c)})";
+                    var comment = service.GetLastComment(taskId);
+                    var commenter = service.GetUserProfile(comment.UserId);
+                    text += $"<pre>\n</pre>Comment by {commenter.Name()} ({TGBot.ToRelativeTime(comment.Time)})";
+                    text += $"<pre>\n</pre><i>{comment.Comment}</i>";
+                    if (commentCount > 2)
+                        text += $"<pre>\n</pre>{commentCount - 1} other comments not shown";
+                    else if (commentCount == 2)
+                        text += $"<pre>\n</pre>One other comment not shown";
                 }
-            }
-            int commentCount = service.GetTaskCommentCount(taskId);
-            if (commentCount > 0)
-            {
-                var comment = service.GetLastComment(taskId);
-                var commenter = service.GetUserProfile(comment.UserId);
-                text += $"<pre>\n</pre>Comment by {commenter.Name()} ({TGBot.ToRelativeTime(comment.Time)})";
-                text += $"<pre>\n</pre><i>{comment.Comment}</i>";
-                if(commentCount>2)
-                    text += $"<pre>\n</pre>{commentCount-1} other comments not shown";
-                else if(commentCount==2)
-                    text += $"<pre>\n</pre>One other comment not shown";
-            }
 
-            var workers = service.GetTaskUsers(taskId, TaskUserRole.Worker);
-            if (workers.Count == 0)
-                text += "<pre>\n</pre>No one is assigned to this task";
-            else
-            {
-                text += "<pre>\n</pre><strong>Working on it:</strong>";
-                text += workers[0].FullName;
-                for (int i = 1; i < workers.Count; i++)
-                    text += ", " + workers[i].FullName;
+                var workers = service.GetTaskUsers(taskId, TaskUserRole.Worker);
+                if (workers.Count == 0)
+                    text += "<pre>\n</pre>No one is assigned to this task";
+                else
+                {
+                    text += "<pre>\n</pre><strong>Working on it:</strong>";
+                    text += workers[0].FullName;
+                    for (int i = 1; i < workers.Count; i++)
+                        text += ", " + workers[i].FullName;
+                }
+                if (options.includeDetailLink)
+                    text += $"<pre>\n</pre> <a href=\"{WebLinkBaseUrl}/task/?id={taskId}\">Details</a>";
+                return text;
             }
-            if (options.includeDetailLink)
-                text += $"<pre>\n</pre> <a href=\"{WebLinkBaseUrl}/task/?id={taskId}\">Details</a>";
-            return text;
         }
 
         static bool runPingThread = true;
@@ -633,15 +672,18 @@ namespace TgBot.Tasks
         }
         static async Task RunTaskPing()
         {
-            var service = new TaskDbService();
-            while (runPingThread)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                var users = service.GetActiveUserProfiles();
-                var interval = TOTAL_PING_INTERVAL / users.Count;
-                foreach (var user in users)
+                var service = serviceProvider.GetService<TaskDbService>();
+                while (runPingThread)
                 {
-                    await PingTask(service, user);
-                    await Task.Delay(interval);
+                    var users = service.GetActiveUserProfiles();
+                    var interval = TOTAL_PING_INTERVAL / users.Count;
+                    foreach (var user in users)
+                    {
+                        await PingTask(service, user);
+                        await Task.Delay(interval);
+                    }
                 }
             }
         }
@@ -653,14 +695,14 @@ namespace TgBot.Tasks
 
         public async Task<bool> HandleUpdateResidualAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            if (update.Type==UpdateType.Message && update.Message.Chat.Type == ChatType.Private && update.Message.Type==MessageType.Text)
+            if (update.Type == UpdateType.Message && update.Message.Chat.Type == ChatType.Private && update.Message.Type == MessageType.Text)
             {
                 var msg = update.Message;
-                var msgTxt=msg.Text.Trim();
+                var msgTxt = msg.Text.Trim();
                 bool taxCodeQuery = false;
                 foreach (var pr in new[] { MisTask.TASK_CODE_PREFIX })
                 {
-                    if (msgTxt.StartsWith(pr, StringComparison.CurrentCultureIgnoreCase) || 
+                    if (msgTxt.StartsWith(pr, StringComparison.CurrentCultureIgnoreCase) ||
                         msgTxt.StartsWith("/" + pr, StringComparison.CurrentCultureIgnoreCase))
                     {
                         taxCodeQuery = true;
@@ -675,17 +717,22 @@ namespace TgBot.Tasks
                     else
                         taskCode = msgTxt.Trim();
                     taskCode = taskCode.Replace(" ", "");
-                    var service = new TaskDbService();
-                    var task = service.GetTaskByCode(taskCode);
-                    if (task != null)
+                    using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
                     {
-                        await TGBot.PushDialog(msg.From.Id.ToString(), new TaskDetailDialog(msg.From.Id.ToString(), task.Id), cancellationToken);
-                        return true;
+                        var service = serviceProvider.GetService<TaskDbService>();
+                        var tgService = serviceProvider.GetService<TgDbService>();
+                        var task = service.GetTaskByCode(taskCode);
+                        if (task != null)
+                        {
+
+                            await TGBot.PushDialog(msg.From.Id.ToString(), new TaskDetailDialog(service, tgService, msg.From.Id.ToString(), task.Id), cancellationToken);
+                            return true;
+                        }
                     }
                 }
-                if(msgTxt.Length>3)
+                if (msgTxt.Length > 3)
                 {
-                    await TGBot.PushDialog(msg.From.Id.ToString(), new TaskListViewer(msg.Chat.Id, msg.From,false, filterText: msgTxt), cancellationToken);
+                    await TGBot.PushDialog(msg.From.Id.ToString(), new TaskListViewer(msg.Chat.Id, msg.From, false, filterText: msgTxt), cancellationToken);
                     return true;
                 }
                 await ProcessStart(botClient, msg.Chat.Id, msg.From, "Sorry, I don't understand what you are trying to say.\nAs a bot, I can sometimes be dumb.", cancellationToken);

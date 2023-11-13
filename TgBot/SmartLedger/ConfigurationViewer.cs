@@ -1,10 +1,12 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
@@ -12,15 +14,23 @@ namespace TgBot.SmartLedger
     {
         public ChatId chatId;
         public User user;
-        public ConfigurationViewer(ChatId chatId, User user)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+        public ConfigurationViewer(SmartLedgerService service, TgDbService tgService,ChatId chatId, User user)
         {
             this.chatId = chatId;
             this.user = user;
+            this.service = service;
+            this.tgService = tgService;
         }
 
         private string FormatCurrentConfiguration()
         {
-            var service = new SmartLedgerService();
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
 
             // Fetch user profiles for Checker, Approver, and Accountant
@@ -64,19 +74,19 @@ namespace TgBot.SmartLedger
             switch (callBack.Data)
             {
                 case "set_checker":
-                    await TGBot.PushDialog(userId, new SetupFlowDialog(chatId, callBack.From,SetupFlowDialog.FIELD_CHECKER_ONE), cancellationToken);
+                    await TGBot.PushDialog(userId, new SetupFlowDialog(service, tgService, chatId, callBack.From, SetupFlowDialog.FIELD_CHECKER_ONE), cancellationToken);
                     break;
 
                 case "set_approver":
-                    await TGBot.PushDialog(userId, new SetupFlowDialog(chatId, callBack.From, SetupFlowDialog.FIELD_APPROVE_ONE), cancellationToken);
+                    await TGBot.PushDialog(userId, new SetupFlowDialog(service, tgService, chatId, callBack.From, SetupFlowDialog.FIELD_APPROVE_ONE), cancellationToken);
                     break;
 
                 case "set_accountant":
-                    await TGBot.PushDialog(userId, new SetupFlowDialog(chatId, callBack.From, SetupFlowDialog.FIELD_ACCOUNTANT), cancellationToken);
+                    await TGBot.PushDialog(userId, new SetupFlowDialog(service, tgService, chatId, callBack.From, SetupFlowDialog.FIELD_ACCOUNTANT), cancellationToken);
                     break;
             }
 
-            return DialogResult.Handled; 
+            return DialogResult.Handled;
         }
 
 

@@ -1,14 +1,16 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TgBot.TgDb;
 
 namespace TgBot.Tasks
 {
-    public class JoinTaskMenuDialog:FormDialog
+    public class JoinTaskMenuDialog : FormDialog
     {
         const String FIELD_SELECTION = "Selection";
 
@@ -19,13 +21,24 @@ namespace TgBot.Tasks
             CreateNewTask,
             JoinExistingTask
         }
-        public JoinTaskMenuDialog():base(null,null)
+        TaskDbService service;
+        TgDbService tgService;
+        public JoinTaskMenuDialog(TaskDbService service, TgDbService tgService) : base(null, null)
         {
-
+            this.service = service;
+            this.tgService = tgService;
         }
-        public JoinTaskMenuDialog(String prompt, ChatId chatId,User user):base(chatId,user)
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<TaskDbService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+
+        public JoinTaskMenuDialog(TaskDbService service, TgDbService tgService, String prompt, ChatId chatId, User user) : base(chatId, user)
         {
             this.Prompt = prompt;
+            this.service = service;
+            this.tgService = tgService;
         }
 
         public override FormDialogField GetFieldDef(string key)
@@ -50,7 +63,7 @@ namespace TgBot.Tasks
             switch ((JoinType)this.FieldData[FIELD_SELECTION].Val())
             {
                 case JoinType.CreateNewTask:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new CreateTaskDialog(this.chatId, this.from,
+                    await TGBot.PushDialog(this.from.Id.ToString(), new CreateTaskDialog(service, tgService, this.chatId, this.from,
                         addCreator: true,
                         startImmidiately: true
                         ), cancellationToken);

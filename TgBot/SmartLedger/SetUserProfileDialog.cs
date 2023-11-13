@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -6,16 +7,21 @@ using Telegram.Bot.Types;
 
 namespace TgBot.SmartLedger
 {
-    public class SetUserProfileDialog<T>:FormDialog where T:TgBotDb, new()
+    public class SetUserProfileDialog<T>:FormDialog where T:TgBotDb
     {
         const string FIELD_SPECIFY_NAME = "SpecifyName";
         const string FIELD_NAME = "Name";
         const String FIELD_SHORT_NAME = "ShortName";
         const String FIELD_GENDER= "Gender";
-        bool UpdateMode => new TgBotService<T>().GetUserProfile(from.Id.ToString()) != null;
-        public SetUserProfileDialog(ChatId chatId, User from) : base(chatId, from)
+        TgBotService<T> service;
+        bool UpdateMode => service.GetUserProfile(from.Id.ToString()) != null;
+        public SetUserProfileDialog(TgBotService<T> service, ChatId chatId, User from) : base(chatId, from)
         {
-
+            this.service = service;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<TgBotService<T>>();
         }
         public override string FirstField => UpdateMode?FIELD_NAME: FIELD_SPECIFY_NAME;
 
@@ -60,7 +66,6 @@ namespace TgBot.SmartLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new TgBotService<T>();
             String name;
             if (FieldData.ContainsKey(FIELD_SPECIFY_NAME) && !"YES".Equals(FieldData[FIELD_SPECIFY_NAME].Val()))
                 name = TGBot.FullName(from);

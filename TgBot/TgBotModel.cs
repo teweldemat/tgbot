@@ -49,13 +49,15 @@ namespace TgBot
         public String Data { get; set; }
         public long Time { get; set; }
         public bool Removed { get; set; }
-        public IBotDialog Deserialize()
+        public IBotDialog Deserialize(IServiceProvider services)
         {
             var t = Type.GetType(DataType);
             if (t == null)
                 return null;
             var res = Newtonsoft.Json.JsonConvert.DeserializeObject(Data, t);
-            return res as IBotDialog;
+            var ret=res as IBotDialog;
+            ret.SetServices(services);
+            return ret;
         }
     }
 }

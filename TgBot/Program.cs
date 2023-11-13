@@ -37,7 +37,7 @@ namespace TgBot
                             .AddJsonFile("appsettings.json").Build();
         }
 
-        public static String GetConnectionString(String name)
+        public static String GetConnectionStringZero(String name)
         {
             String con;
             try

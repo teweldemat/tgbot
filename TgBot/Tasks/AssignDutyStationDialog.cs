@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TgBot.SmartLedger;
+using TgBot.TgDb;
 
 namespace TgBot.Tasks
 {
@@ -16,15 +18,24 @@ namespace TgBot.Tasks
         const string FIELD_REMOTE = "Remote";
         public List<DutyStation> DutyStation { get; set; }
         public List<MisUserProfile> Users { get; set; }
-        public AssignDutyStationDialog():base(null,null)
+        TaskDbService service;
+        TgDbService tgService;
+        public AssignDutyStationDialog(TaskDbService service,TgDbService tgService):base(null,null)
         {
-            var service = new TaskDbService();
+            this.service = service;
             this.DutyStation = service.GetAllDutyStations();
             this.Users = service.GetActiveUserProfiles();
+            this.tgService = tgService;
         }
-        public AssignDutyStationDialog(ChatId chatId,User user):base(chatId,user)
+        public override void SetServices(IServiceProvider services)
         {
-            var service = new TaskDbService();
+            this.service = services.GetService<TaskDbService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+    
+        public AssignDutyStationDialog(TaskDbService service,ChatId chatId,User user):base(chatId,user)
+        {
+            this.service = service;
             this.DutyStation = service.GetAllDutyStations();
             this.Users = service.GetActiveUserProfiles();
         }
@@ -33,7 +44,6 @@ namespace TgBot.Tasks
 
         public override FormDialogField GetFieldDef(string key)
         {
-            var service = new TaskDbService();
             switch (key)
             {
                 case FIELD_SELECT_USER:
@@ -74,7 +84,6 @@ namespace TgBot.Tasks
                 UserId=this.FieldData[FIELD_SELECT_USER].Val() as string
             };
             var schedule = SimpleWorkingDayWeek.CreateDefaultFullTime((bool)this.FieldData[FIELD_REMOTE].Val(), true);
-            var service = new TaskDbService();
             var thisUser = service.GetUserProfile(this.from.Id.ToString());
             var ds = this.DutyStation.Where(x => x.Id == userDS.DutyStationId).First();
             var assigned = this.Users.Where(x => x.UserId.Equals(userDS.UserId)).First();
@@ -99,7 +108,7 @@ namespace TgBot.Tasks
             }
             try
             {
-                await TaskBot.NotifyGroups(bot,$"{assigned.Name()} have been assigned to duty station {ds.Name} by {thisUser.Name()}", false,cancellationToken: cancellationToken);
+                await TaskBot.NotifyGroups(bot,tgService, $"{assigned.Name()} have been assigned to duty station {ds.Name} by {thisUser.Name()}", false,cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {

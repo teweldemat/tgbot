@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,6 +11,8 @@ using Telegram.Bot.Extensions.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TgBot.SmartLedger;
+using TgBot.TgDb;
 
 namespace TgBot
 {
@@ -37,7 +40,6 @@ namespace TgBot
         };
 
         public static String BotAdmin;
-        static TgDb.TgDbService service = new TgDb.TgDbService();
         public static String meName;
         static ITGBotApp botApp = null;
         static long TimeOffset;
@@ -60,8 +62,8 @@ namespace TgBot
         }
         public TGBot()
         {
-            
-            
+
+
         }
         public async static void StartAsync()
         {
@@ -72,7 +74,7 @@ namespace TgBot
             var me = await Bot.GetMeAsync();
             Console.Title = me.Username;
             meName = me.Username;
-            
+
             Bot.StartReceiving(new TGBot());
             botApp.OnBotConnect(Bot);
             Console.WriteLine($"Start listening for @{me.Username}");
@@ -91,7 +93,7 @@ namespace TgBot
             if (ts.TotalDays < 1)
             {
                 int min = (int)Math.Round(ts.TotalMinutes);
-                return $"{min/60} Hours and {min%60} Minutes";
+                return $"{min / 60} Hours and {min % 60} Minutes";
             }
             return $"{(int)Math.Round(ts.TotalDays)} days";
         }
@@ -101,11 +103,11 @@ namespace TgBot
             var dt = new DateTime(time);
             if (Math.Abs(now.Subtract(dt).TotalSeconds) < 60)
                 return "now";
-            if(now.Year==dt.Year)
+            if (now.Year == dt.Year)
             {
                 if (now.Month == dt.Month && now.Day == dt.Day)
                 {
-                        return dt.ToString("HH:mm");
+                    return dt.ToString("HH:mm");
                 }
                 if (dt.Date == dt)
                     return dt.ToString("MMM dd");
@@ -135,109 +137,117 @@ namespace TgBot
                         return false;
                 }
             }
-            var state = service.GetUserState(userId);
-            WFDialogItem stack;
-            var id = state.StackHead;
-            while (id != null)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                stack = service.GetDialogItem(userId, id.Value);
-                var diag = stack.Deserialize();
-                DialogResult res;
-                if (update == null)
-                    res = await diag.HandlePaymentAsync(botClient, checkOutCode, cancelationToken);
-                else
-                    res = await diag.HandleUpdateAsync(botClient, update, cancelationToken);
+                var service = serviceProvider.GetService<TgDbService>();
+                var state = service.GetUserState(userId);
+                WFDialogItem stack;
+                var id = state.StackHead;
+                while (id != null)
+                {
+                    stack = service.GetDialogItem(userId, id.Value);
+                    var diag = stack.Deserialize(serviceProvider);
+                    DialogResult res;
+                    if (update == null)
+                        res = await diag.HandlePaymentAsync(botClient, checkOutCode, cancelationToken);
+                    else
+                        res = await diag.HandleUpdateAsync(botClient, update, cancelationToken);
 
-                service.SaveDialogState(stack, diag);
-                if (res == DialogResult.Terminated)
-                {
-                    service.RemoveDialogItem(id.Value);
-                    return true;
+                    service.SaveDialogState(stack, diag);
+                    if (res == DialogResult.Terminated)
+                    {
+                        service.RemoveDialogItem(id.Value);
+                        return true;
+                    }
+                    if (res == DialogResult.Handled)
+                    {
+                        return true;
+                    }
+                    id = stack.Next;
                 }
-                if (res == DialogResult.Handled)
-                {
-                    return true;
-                }
-                id = stack.Next;
+                return false;
             }
-            return false;
         }
         public async Task HandleUpdate(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
             Chat defaultChat = null;
-            try
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                switch (update.Type)
+                var service = serviceProvider.GetService<TgDbService>();
+                try
                 {
-                    case UpdateType.MyChatMember:
-                        if (update.MyChatMember.Chat.Type == ChatType.Group || update.MyChatMember.Chat.Type == ChatType.Supergroup)
-                        {
-                            if (update.MyChatMember.NewChatMember.Status == ChatMemberStatus.Left)
-                                service.LeftGroup(TGBot.BotToken, update.MyChatMember.Chat.Id);
-                            else
-                                service.JoinedGroup(TGBot.BotToken, update.MyChatMember.Chat.Id);
-                            return;
-                        }
-                        break;
-                    case UpdateType.ChatMember:
-                        if (update.ChatMember.Chat.Type == ChatType.Group || update.ChatMember.Chat.Type == ChatType.Supergroup)
-                        {
-                            service.JoinedGroup(TGBot.BotToken, update.ChatMember.Chat.Id);
-                            return;
-                        }
-                        break;
-                    case UpdateType.CallbackQuery:
-                        defaultChat = update.CallbackQuery.Message.Chat;
-                        if (update.CallbackQuery == null
-                            || update.CallbackQuery.From == null
-                            || update.CallbackQuery.Data == null
-                            )
-                            return;
-                        var q = update.CallbackQuery;
-                        await Bot.AnswerCallbackQueryAsync(
-                            callbackQueryId: q.Id,
-                            text: $"Received {q.Data}"
-                        );
-                        break;
-                    case UpdateType.Message:
-                        defaultChat = update.Message.Chat;
-                        break;
+                    switch (update.Type)
+                    {
+                        case UpdateType.MyChatMember:
+                            if (update.MyChatMember.Chat.Type == ChatType.Group || update.MyChatMember.Chat.Type == ChatType.Supergroup)
+                            {
+                                if (update.MyChatMember.NewChatMember.Status == ChatMemberStatus.Left)
+                                    service.LeftGroup(TGBot.BotToken, update.MyChatMember.Chat.Id);
+                                else
+                                    service.JoinedGroup(TGBot.BotToken, update.MyChatMember.Chat.Id);
+                                return;
+                            }
+                            break;
+                        case UpdateType.ChatMember:
+                            if (update.ChatMember.Chat.Type == ChatType.Group || update.ChatMember.Chat.Type == ChatType.Supergroup)
+                            {
+                                service.JoinedGroup(TGBot.BotToken, update.ChatMember.Chat.Id);
+                                return;
+                            }
+                            break;
+                        case UpdateType.CallbackQuery:
+                            defaultChat = update.CallbackQuery.Message.Chat;
+                            if (update.CallbackQuery == null
+                                || update.CallbackQuery.From == null
+                                || update.CallbackQuery.Data == null
+                                )
+                                return;
+                            var q = update.CallbackQuery;
+                            await Bot.AnswerCallbackQueryAsync(
+                                callbackQueryId: q.Id,
+                                text: $"Received {q.Data}"
+                            );
+                            break;
+                        case UpdateType.Message:
+                            defaultChat = update.Message.Chat;
+                            break;
+                    }
+                    if (await ProcessSystemLevel(botClient, update, cancellationToken))
+                        return;
+                    if (await botApp.HandleUpdateAsync(botClient, update, cancellationToken))
+                        return;
+                    if (await HandleDialog(botClient, update, null, null, cancellationToken))
+                        return;
+                    if (await botApp.HandleUpdateResidualAsync(botClient, update, cancellationToken))
+                        return;
                 }
-                if (await ProcessSystemLevel(botClient, update, cancellationToken))
-                    return;
-                if (await botApp.HandleUpdateAsync(botClient, update, cancellationToken))
-                    return;
-                if (await HandleDialog(botClient, update, null, null, cancellationToken))
-                    return;
-                if (await botApp.HandleUpdateResidualAsync(botClient, update, cancellationToken))
-                    return;
 
-            }
-            catch (UserFriendlyError uer)
-            {
-                LogException("Error processing update.",uer);
-                Console.WriteLine($": {uer.Message}");
-                if (defaultChat != null)
-                    await Bot.SendTextMessageAsync(defaultChat.Id, uer.Message);
-            }
-            catch (Exception ex)
-            {
-                LogException("Error processing update.", ex);
-                if (defaultChat != null)
-                    await Bot.SendTextMessageAsync(defaultChat.Id, "Sorry, but there was a system problem. Try again later.");
+                catch (UserFriendlyError uer)
+                {
+                    LogException("Error processing update.", uer);
+                    Console.WriteLine($": {uer.Message}");
+                    if (defaultChat != null)
+                        await Bot.SendTextMessageAsync(defaultChat.Id, uer.Message);
+                }
+                catch (Exception ex)
+                {
+                    LogException("Error processing update.", ex);
+                    if (defaultChat != null)
+                        await Bot.SendTextMessageAsync(defaultChat.Id, "Sorry, but there was a system problem. Try again later.");
+                }
             }
         }
 
-        
+
 
         private async Task<bool> ProcessSystemLevel(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            if(update.Type==UpdateType.Message && !String.IsNullOrEmpty(update.Message.Text))
+            if (update.Type == UpdateType.Message && !String.IsNullOrEmpty(update.Message.Text))
             {
                 var cmd = update.Message.Text;
-                if(TGBot.DebugMode && cmd.StartsWith(SYS_CMD_SET_NOW,StringComparison.OrdinalIgnoreCase))
+                if (TGBot.DebugMode && cmd.StartsWith(SYS_CMD_SET_NOW, StringComparison.OrdinalIgnoreCase))
                 {
-                    if(DateTime.TryParse(cmd.Substring(SYS_CMD_SET_NOW.Length),out var dt))
+                    if (DateTime.TryParse(cmd.Substring(SYS_CMD_SET_NOW.Length), out var dt))
                     {
                         //var utc = TimeZoneInfo.ConvertTimeToUtc(dt);
                         TimeOffset = dt.Ticks - DateTime.Now.Ticks;
@@ -265,11 +275,11 @@ namespace TgBot
                 return new DateTime(DateTime.Now.Ticks + TimeOffset);
             return DateTime.Now;
         }
-        public static void LogException(String msg,Exception ex)
+        public static void LogException(String msg, Exception ex)
         {
             int n = 1;
             Console.WriteLine(msg);
-            while(ex!=null)
+            while (ex != null)
             {
                 Console.WriteLine($"Error {n}. {ex.Message}\n{ex.StackTrace}");
                 ex = ex.InnerException;
@@ -298,74 +308,93 @@ namespace TgBot
             var res = await d.StartAsync(Bot, cancelationToken);
             if (res == DialogResult.Terminated)
                 return;
-            var state = service.GetOrCreateUser(userId);
-            if (state.StackHead != null)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                var diag = service.GetDialogItem(userId, state.StackHead.Value).Deserialize();
-                if (diag != null)
+                var service = serviceProvider.GetService<TgDbService>();
+                var state = service.GetOrCreateUser(userId);
+                if (state.StackHead != null)
                 {
-                    if (diag.OverlapPolicy == DialogOverlapPolicy.CancelOnOverlap)
+                    var diag = service.GetDialogItem(userId, state.StackHead.Value).Deserialize(serviceProvider);
+                    if (diag != null)
                     {
-                        if (await diag.HandleCancel(Bot, cancelationToken) != DialogResult.Terminated)
-                            throw new Exception("Dialog should terminate on call to cancel");
-
+                        if (diag.OverlapPolicy == DialogOverlapPolicy.CancelOnOverlap)
+                        {
+                            if (await diag.HandleCancel(Bot, cancelationToken) != DialogResult.Terminated)
+                                throw new Exception("Dialog should terminate on call to cancel");
+                            service.RemoveDialogItem(state.StackHead.Value);
+                            var state2 = service.GetOrCreateUser(userId);
+                        }
+                        else
+                            throw new Exception("Only cancel on overlap allowed");
                     }
-                    else
-                        throw new Exception("Only cancel on overlap allowed");
+                    
                 }
-                service.RemoveDialogItem(state.StackHead.Value);
+                var did=service.PushDialog(userId, d);
+                var state3 = service.GetOrCreateUser(userId);
             }
-            service.PushDialog(userId, d);
+            Console.WriteLine("Dispose");
         }
 
         internal static bool DialogActive(string tgUserID)
         {
-            var state=service.GetUserState(tgUserID);
-            if (state == null || state.StackHead == null)
-                return false;
-            return true;
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
+            {
+                var service = serviceProvider.GetService<TgDbService>();
+                var state = service.GetUserState(tgUserID);
+                if (state == null || state.StackHead == null)
+                    return false;
+                return true;
+            }
         }
         internal static WFDialogItem CurrentDialog(string tgUserID)
         {
-            var state = service.GetUserState(tgUserID);
-            if (state == null || state.StackHead == null)
-                return null;
-            return service.GetDialogItem(tgUserID,state.StackHead.Value);
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
+            {
+                var service = serviceProvider.GetService<TgDbService>();
+                var state = service.GetUserState(tgUserID);
+                if (state == null || state.StackHead == null)
+                    return null;
+                return service.GetDialogItem(tgUserID, state.StackHead.Value);
+            }
         }
-        internal static async Task ClearDialogAsync(ITelegramBotClient bot, ChatId chatId, string tgUserID,CancellationToken cancellationToken)
+        internal static async Task ClearDialogAsync(ITelegramBotClient bot, ChatId chatId, string tgUserID, CancellationToken cancellationToken)
         {
-            var state = service.GetUserState(tgUserID);
-            var diag = state.StackHead == null ? null : service.GetDialogItem(tgUserID,state.StackHead.Value);
-            while(diag!=null)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                try
+                var service = serviceProvider.GetService<TgDbService>();
+                var state = service.GetUserState(tgUserID);
+                var diag = state.StackHead == null ? null : service.GetDialogItem(tgUserID, state.StackHead.Value);
+                while (diag != null)
                 {
-                    var d = diag.Deserialize();
-                    if(d!=null)
-                        await d.HandleCancel(bot, cancellationToken);
+                    try
+                    {
+                        var d = diag.Deserialize(serviceProvider);
+                        if (d != null)
+                            await d.HandleCancel(bot, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        TGBot.LogException($"Error trying to cancel dialog {diag.id}", ex);
+                    }
+                    diag = diag.Next == null ? null : service.GetDialogItem(tgUserID, diag.Next.Value);
                 }
-                catch(Exception ex)
+                int count = service.ClearDialogStack(tgUserID);
+                if (count == 0)
                 {
-                    TGBot.LogException($"Error trying to cancel dialog {diag.id}", ex);
+                    await Bot.SendTextMessageAsync(chatId, Program.lm.Nothing_to_cancel);
                 }
-                diag = diag.Next== null ? null : service.GetDialogItem(tgUserID, diag.Next.Value);
-            }
-            int count = service.ClearDialogStack(tgUserID);
-            if (count == 0)
-            {
-                await Bot.SendTextMessageAsync(chatId, Program.lm.Nothing_to_cancel);
-            }
-            else
-            {
-                await Bot.SendTextMessageAsync(chatId, Program.lm.Ok_canceled);
+                else
+                {
+                    await Bot.SendTextMessageAsync(chatId, Program.lm.Ok_canceled);
+                }
             }
         }
-        public static String GetParseError(string txt,Func<double,String> amountValidate, out double amount)
+        public static String GetParseError(string txt, Func<double, String> amountValidate, out double amount)
         {
             amount = 0;
             if (txt.Contains("cent", StringComparison.CurrentCultureIgnoreCase))
                 return "Don't use cents";
-            var sanitized = txt.Replace("Birrs", "",StringComparison.CurrentCultureIgnoreCase)
+            var sanitized = txt.Replace("Birrs", "", StringComparison.CurrentCultureIgnoreCase)
                 .Replace("Birr", "", StringComparison.CurrentCultureIgnoreCase);
             if (double.TryParse(sanitized, out amount))
             {
@@ -395,7 +424,7 @@ namespace TgBot
             }
             catch
             {
-                switch(imageMime.ToLower())
+                switch (imageMime.ToLower())
                 {
                     case "application/sql":
                         return ".sql";

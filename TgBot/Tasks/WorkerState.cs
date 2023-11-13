@@ -1,16 +1,19 @@
-﻿using Newtonsoft.Json;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Telegram.Bot.Types;
+using TgBot.SmartLedger;
+using TgBot.TgDb;
 
 namespace TgBot.Tasks
 {
     public class WorkerState
     {
         const double PING_DURATION_SECONDS = 5;
-        const double PING_WAIT_ACTIVE_DIAG_SECONDS = 10*60; //ten minutes
+        const double PING_WAIT_ACTIVE_DIAG_SECONDS = 10 * 60; //ten minutes
         const double ON_DUTY_NOTFICATION_INTERVAL = 30;
         const double NOTIFY_AFTER_CHECKIN_TIME_MINUTES = 5;
         const double NOTIFY_ETA_CHECKIN_TIME_MINUTES = 5;
@@ -20,26 +23,26 @@ namespace TgBot.Tasks
         public const double MIN_LEAVE_NOTIFIABLE_LEAVE = 1.5;
         public const double MIN_ADVANCE_NOTIFY_DAYS = 5;
         public const double ADVANCE_NOTIFY_DAYS = 3;
-        const double PLANED_TASKS_PROMPT_INTERVAL_MINUTES = 1 * 60; 
+        const double PLANED_TASKS_PROMPT_INTERVAL_MINUTES = 1 * 60;
 
         public String UserId { get; set; }
         public long? LastPingTime { get; set; } = null;
         public long? LastOnDuytNotifcationTime { get; set; } = null;
-        
+
 
         [JsonIgnore]
         Telegram.Bot.TelegramBotClient bot = null;
         [JsonIgnore]
         System.Threading.CancellationToken cancellationToken;
         [JsonIgnore]
-        ChatId  chatId= null;
+        ChatId chatId = null;
         [JsonIgnore]
-        User user=null;
+        User user = null;
         public WorkerState()
         {
             UserId = null;
         }
-        public WorkerState SetBotContext(Telegram.Bot.TelegramBotClient bot,ChatId chatId, User from, System.Threading.CancellationToken cancellationToken)
+        public WorkerState SetBotContext(Telegram.Bot.TelegramBotClient bot, ChatId chatId, User from, System.Threading.CancellationToken cancellationToken)
         {
             this.bot = bot;
             this.cancellationToken = cancellationToken;
@@ -53,11 +56,11 @@ namespace TgBot.Tasks
         }
         class DSPingResult
         {
-            public bool onDuty=false;
-            public bool notified=false;
+            public bool onDuty = false;
+            public bool notified = false;
             public OnDutyCheck lastCheck = null;
         }
-        async Task<DSPingResult> PingDutySchedule(TaskDbService service, long time)
+        async Task<DSPingResult> PingDutySchedule(TaskDbService service, TgDbService tgService,long time)
         {
             var dsException = service.GetDSException(this.UserId, time);
             var user = service.GetUserProfile(this.UserId);
@@ -84,16 +87,16 @@ namespace TgBot.Tasks
             DutyTimeSpan span = null;
             if (dutySchedule != null)
             {
-                span = dutySchedule.GetOnCurrentOnDutySpan(UserId, time);
+                span = dutySchedule.GetOnCurrentOnDutySpan(service, UserId, time);
                 if (span != null)
                 {
-                    dutyStation = service.GetUserDutyStation(this.UserId,time);
+                    dutyStation = service.GetUserDutyStation(this.UserId, time);
                 }
             }
-            if (dutyStation == null ) //he is not on duty. Probably a subcontractor or a consultant
+            if (dutyStation == null) //he is not on duty. Probably a subcontractor or a consultant
                 return new DSPingResult();
             var dt = new DateTime(time);
-            
+
             if (new TimeSpan(time - span.StartTime(dt)).TotalMinutes < NOTIFY_AFTER_CHECKIN_TIME_MINUTES) //if it only few minutes since the start of the current duty time span
                 return new DSPingResult();
 
@@ -114,10 +117,10 @@ namespace TgBot.Tasks
 
                 if (lastCheck.CheckType == OnDutyCheckType.CheckOut) //if already left
                     return new DSPingResult() { lastCheck = lastCheck };
-                
+
                 if (lastCheck.CheckType == OnDutyCheckType.RunningLate
                     || lastCheck.CheckType == OnDutyCheckType.TakingBreak
-                    ||lastCheck.CheckType == OnDutyCheckType.OffDutyStationAssignment
+                    || lastCheck.CheckType == OnDutyCheckType.OffDutyStationAssignment
                     || lastCheck.CheckType == OnDutyCheckType.DontDisturb
                     ) //if temporarily unavialable
                 {
@@ -127,23 +130,23 @@ namespace TgBot.Tasks
 
                 if (lastCheck.CheckType == OnDutyCheckType.CheckIn)
                 {
-                    return new DSPingResult { onDuty = true ,lastCheck = lastCheck };
-                }                
+                    return new DSPingResult { onDuty = true, lastCheck = lastCheck };
+                }
             }
-            await TGBot.PushDialog(this.UserId, new OnDutyCheckDialog(this.chatId, this.user, false), this.cancellationToken);
+            await TGBot.PushDialog(this.UserId, new OnDutyCheckDialog(service,tgService, this.chatId, this.user, false), this.cancellationToken);
             return new DSPingResult { onDuty = true, notified = true };
         }
 
 
         long? lastNoPlannedTasks = null;
-        async Task<bool> PingTask(TaskDbService service, DSPingResult pingDSRes, long time)
+        async Task<bool> PingTask(TaskDbService service,TgDbService tgService, DSPingResult pingDSRes, long time)
         {
             if (pingDSRes.lastCheck != null && pingDSRes.lastCheck.CheckType == OnDutyCheckType.DontDisturb)
                 return false;
-            var tasks = service.GetUserActiveTasks(UserId,TaskUserRole.Worker);
+            var tasks = service.GetUserActiveTasks(UserId, TaskUserRole.Worker);
             var plannedTasks = new List<MisTask>();
             var activeTasks = new List<MisTask>();
-            var awaitedTasks= new Dictionary<MisTask,List<MisTask>>();
+            var awaitedTasks = new Dictionary<MisTask, List<MisTask>>();
             foreach (var task in tasks)
             {
                 if (task.Status == TaskStatus.Planned)
@@ -154,23 +157,23 @@ namespace TgBot.Tasks
                 if (wt.Count > 0)
                     awaitedTasks.Add(task, wt);
             }
-            if(activeTasks.Count==0) //no active task
+            if (activeTasks.Count == 0) //no active task
             {
-                if(plannedTasks.Count>0) //if there are planned tasks prompt him to start one of the planned tasks
+                if (plannedTasks.Count > 0) //if there are planned tasks prompt him to start one of the planned tasks
                 {
-                    if(lastNoPlannedTasks==null && new TimeSpan(time-lastNoPlannedTasks.Value).TotalMinutes>PLANED_TASKS_PROMPT_INTERVAL_MINUTES)
+                    if (lastNoPlannedTasks == null && new TimeSpan(time - lastNoPlannedTasks.Value).TotalMinutes > PLANED_TASKS_PROMPT_INTERVAL_MINUTES)
                     {
                         plannedTasks.Sort((x, y) => x.PlannedStartTime.Value.CompareTo(y.PlannedStartTime.Value));
-                        await TGBot.PushDialog(this.user.Id.ToString(), new StartPlannedTask(plannedTasks, this.chatId, this.user), this.cancellationToken);
+                        await TGBot.PushDialog(this.user.Id.ToString(), new StartPlannedTask(service,tgService, plannedTasks, this.chatId, this.user), this.cancellationToken);
                         lastNoPlannedTasks = time;
                         return true;
                     }
                 }
-                else if(plannedTasks.Count==0) //if there is no planned task, offer to create new task
+                else if (plannedTasks.Count == 0) //if there is no planned task, offer to create new task
                 {
                     if (pingDSRes.onDuty)
                     {
-                        await TGBot.PushDialog(this.user.Id.ToString(), new JoinTaskMenuDialog(
+                        await TGBot.PushDialog(this.user.Id.ToString(), new JoinTaskMenuDialog(service,tgService,
                             "You don't have any task, what do you want to do?",
                             this.chatId,
                             this.user), cancellationToken);
@@ -178,22 +181,26 @@ namespace TgBot.Tasks
                 }
             }
             return true;
-        }        
+        }
 
         public async Task Ping(long time)
         {
             var current = TGBot.CurrentDialog(this.UserId);
-            if (current!=null && new TimeSpan(time-current.Time).TotalSeconds<PING_WAIT_ACTIVE_DIAG_SECONDS)
+            if (current != null && new TimeSpan(time - current.Time).TotalSeconds < PING_WAIT_ACTIVE_DIAG_SECONDS)
                 return;
-            if (LastPingTime!=null && new TimeSpan(time - LastPingTime.Value).TotalSeconds < PING_DURATION_SECONDS)
+            if (LastPingTime != null && new TimeSpan(time - LastPingTime.Value).TotalSeconds < PING_DURATION_SECONDS)
                 return;
-            var service = new TaskDbService();
-            var pingRes=await PingDutySchedule(service, time);
-            if(!pingRes.notified)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                await PingTask(service, pingRes, time);
+                var service = serviceProvider.GetService<TaskDbService>();
+                var tgService= serviceProvider.GetService<TgDbService>();
+
+                var pingRes = await PingDutySchedule(service, tgService,time);
+                if (!pingRes.notified)
+                {
+                    await PingTask(service,tgService, pingRes, time);
+                }
             }
-           
         }
     }
 }

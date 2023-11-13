@@ -5,6 +5,11 @@ namespace TgBot.Exchange
 {
     public class ExchangeDb:TgBotDb
     {
+        public ExchangeDb(DbContextOptions<TgBotDb> options) : base(options)
+        {
+
+        }
+
         public DbSet<ExchangeUserProfile> UserProfiles{ get; set; }
         public DbSet<AssetType> AssetTypes { get; set; }
         public DbSet<BankAccountType> BankAccountTypes { get; set; }
@@ -16,12 +21,6 @@ namespace TgBot.Exchange
         public DbSet<OfferBankAccount> OfferBankAccounts { get; set; }
         public DbSet<OfferStatusHistory> OfferStatusHistory { get; set; }
         public DbSet<TrusteeApplication> TrusteeApplications { get; set; }
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder
-                .UseNpgsql(Program.GetConnectionString("TGBot"))
-                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
-        }
         
         static BankAccountType[] initialBankAccounts()
         {

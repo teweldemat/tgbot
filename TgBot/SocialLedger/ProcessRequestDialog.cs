@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -14,18 +15,22 @@ namespace TgBot.SocialLedger
         public Guid RequestId { get; set; }
 
         public override string FirstField => FIELD_ACCEPT;
-
-        public ProcessRequestDialog(ChatId chatId,User from,Guid requestId):base(chatId,from)
+        SocialLedgerDbService service;
+        
+        public ProcessRequestDialog(SocialLedgerDbService service,ChatId chatId,User from,Guid requestId):base(chatId,from)
         {
             this.RequestId = requestId;
+            this.service = service;
         }
-
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SocialLedgerDbService>();
+        }
         public override FormDialogField GetFieldDef(string key)
         {
             switch(key)
             {
                 case FIELD_ACCEPT:
-                    var service = new SocialLedgerDbService();
                     var request = service.GetLedgerPair(RequestId);
                     if (request == null)
                         throw new UserFriendlyError("Request doesn't exisit");
@@ -43,7 +48,6 @@ namespace TgBot.SocialLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SocialLedgerDbService();
             var accepted = "YES".Equals(this.FieldData[FIELD_ACCEPT].Val());
             var request = service.GetLedgerPair(RequestId);
             if (accepted)

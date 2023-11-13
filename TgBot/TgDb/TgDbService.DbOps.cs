@@ -60,6 +60,9 @@ namespace TgBot.TgDb
                 state.LastUpdateTime = TGBot.Now();
                 db.Update(state);
                 db.Update(tg);
+                db.SaveChanges();
+                db.Entry(state).State = EntityState.Detached;
+                db.Entry(tg).State = EntityState.Detached;
             }
             public static int ClearDialogStack(TgBotDbContext db, String botId,string tgUserId)
             {
@@ -94,6 +97,8 @@ namespace TgBot.TgDb
                     var prev = res.First();
                     prev.Next = diag.Next;
                     db.Update(prev);
+                    db.SaveChanges();
+                    db.Entry(prev).State = EntityState.Detached;
                 }
                 
                 diag.Removed = true;
@@ -101,9 +106,11 @@ namespace TgBot.TgDb
                 
                 userState.LastUpdateTime = TGBot.Now();
                 db.Update(userState);
-                
                 db.SaveChanges();
+                db.Entry(userState).State = EntityState.Detached;
+                db.Entry(diag).State = EntityState.Detached;
             }
+
             public static Guid PushDialog(TgBotDbContext db, String botId, String tgUserId, IBotDialog dialog)
             {
                 var userState = GetUserState(db,botId, tgUserId);
@@ -122,6 +129,11 @@ namespace TgBot.TgDb
                 userState.LastUpdateTime = TGBot.Now();
                 db.Add(stack);
                 db.Update(userState);
+                
+                db.SaveChanges();
+                db.Entry(userState).State = EntityState.Detached;
+                db.Entry(stack).State = EntityState.Detached;
+
                 return stack.id;
             }
             public static WFDialogItem GetDialogItem(TgBotDbContext db, Guid diagId)
@@ -134,7 +146,7 @@ namespace TgBot.TgDb
             public static TgUserState GetUserState(TgBotDbContext db, String botId,string userID)
             {
                 //return DbOps.GetUserState(db,)
-                var us = db.WFTelegramUserStates.Where(x => x.TgUserID == userID && x.TgBotId==botId);
+                var us = db.WFTelegramUserStates.AsNoTracking().Where(x => x.TgUserID == userID && x.TgBotId==botId);
                 if (us.Any())
                     return us.First();
                 return null;

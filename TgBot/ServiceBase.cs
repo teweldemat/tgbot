@@ -2,23 +2,26 @@
 using System;
 namespace TgBot
 {
-    public class ServiceBase<DbType> where DbType:DbContext,new()
+    public class ServiceBase<DbType> where DbType:DbContext
     {
         protected delegate void TransactNoReturnDelegate(DbType db);
         protected delegate T TransactionReturnDelegate<T>(DbType db);
+        protected DbType db;
+        public ServiceBase(DbType db)
+        {
+            this.db = db;
+        }
+
         protected T DbRead<T>(Func<DbType, T> operation)
         {
-            using (var db = new DbType())
-                return operation(db);
+            return operation(db);
         }
         protected void DbReadVoid(Action<DbType> operation)
         {
-            using (var db = new DbType())
-                operation(db);
+            operation(db);
         }
         protected void TransactNoReturn(TransactNoReturnDelegate f)
         {
-            using (var db = new DbType())
             {
                 var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
                 try
@@ -36,7 +39,6 @@ namespace TgBot
         }
         protected T TransactReturn<T>(TransactionReturnDelegate<T> f)
         {
-            using (var db = new DbType())
             {
                 var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
                 try

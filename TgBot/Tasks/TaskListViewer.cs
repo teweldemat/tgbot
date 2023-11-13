@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger;
+using TgBot.TgDb;
 
 namespace TgBot.Tasks
 {
@@ -31,6 +33,9 @@ namespace TgBot.Tasks
             this.filterByUser = filterByUser;
             this.filterText = filterText;
         }
+        public override void SetServices(IServiceProvider services)
+        {
+        }
         public static string FormatPayment(TaskDbService coreService, MisTask task, String numLabel)
         {
             var html = $"{numLabel}";
@@ -39,63 +44,64 @@ namespace TgBot.Tasks
         }
         async Task<bool> ShowPageAsync(ITelegramBotClient bot, int index, CancellationToken cancelationToken)
         {
-
-            var coreService = new TaskDbService();
-            int totalN;
-            var tasks = filterByUser == null
-                ? coreService.GetActiveTasks(filterText == null, filterText == null, filterText, index, CONTLIST_PAGE_SIZE, out totalN)
-                : coreService.GetActiveTasksByUser(filterByUser, TaskUserRole.Worker, filterText, index, CONTLIST_PAGE_SIZE, out totalN);
-            if (tasks.Count == 0)
+            using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
-                await bot.SendTextMessageAsync(chatId, filterText == null ? "No tasks found." : "No tasks found containing text:" + filterText);
-            }
-            else
-            {
-                var n = 1;
-                String listHtml = null;
-                foreach (var f in tasks)
+                var coreService = serviceProvider.GetService<TaskDbService>();
+                int totalN;
+                var tasks = filterByUser == null
+                    ? coreService.GetActiveTasks(filterText == null, filterText == null, filterText, index, CONTLIST_PAGE_SIZE, out totalN)
+                    : coreService.GetActiveTasksByUser(filterByUser, TaskUserRole.Worker, filterText, index, CONTLIST_PAGE_SIZE, out totalN);
+                if (tasks.Count == 0)
                 {
-                    var html = FormatPayment(coreService, f, $"{index + n}. ");
-                    listHtml = listHtml == null ? html : (listHtml + "<pre>\n\n</pre>" + html);
-                    n++;
-                }
-                if (filterText != null)
-                    listHtml += $"<pre>\n\n</pre>Showing tasks containing text: <i>{filterText}</i>.<pre>\n</pre>Enter /clear to remove the filter";
-                if (nextButtonShown)
-                {
-                    await bot.EditMessageReplyMarkupAsync(chatId, this.buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));
-                    this.nextButtonShown = false;
-                }
-                if (index + CONTLIST_PAGE_SIZE < totalN)
-                {
-                    this.pageIndex = index + CONTLIST_PAGE_SIZE;
-                    var buttons = new InlineKeyboardButton[][]
-                        {
-                        new[] { InlineKeyboardButton.WithCallbackData(Program.lm.Show_more_n_records(Math.Min(CONTLIST_PAGE_SIZE, totalN - (index + CONTLIST_PAGE_SIZE)))
-                        +"\t (Or type a filter)"
-                        , PAGE_PREFIX + pageIndex), }
-                        };
-                    var replyKeyboardMarkup = new InlineKeyboardMarkup(buttons.ToArray());
-                    var msg = await bot.SendTextMessageAsync(
-                        chatId: chatId,
-                        text: listHtml,
-                        parseMode: ParseMode.Html,
-                        replyMarkup: replyKeyboardMarkup
-                    );
-                    this.nextButtonShown = true;
-                    this.buttonMsgId = msg.MessageId;
-                    this.prevText = listHtml;
+                    await bot.SendTextMessageAsync(chatId, filterText == null ? "No tasks found." : "No tasks found containing text:" + filterText);
                 }
                 else
                 {
-                    await bot.SendTextMessageAsync(chatId,
-                        text: listHtml,
-                        parseMode: ParseMode.Html);
+                    var n = 1;
+                    String listHtml = null;
+                    foreach (var f in tasks)
+                    {
+                        var html = FormatPayment(coreService, f, $"{index + n}. ");
+                        listHtml = listHtml == null ? html : (listHtml + "<pre>\n\n</pre>" + html);
+                        n++;
+                    }
+                    if (filterText != null)
+                        listHtml += $"<pre>\n\n</pre>Showing tasks containing text: <i>{filterText}</i>.<pre>\n</pre>Enter /clear to remove the filter";
+                    if (nextButtonShown)
+                    {
+                        await bot.EditMessageReplyMarkupAsync(chatId, this.buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));
+                        this.nextButtonShown = false;
+                    }
+                    if (index + CONTLIST_PAGE_SIZE < totalN)
+                    {
+                        this.pageIndex = index + CONTLIST_PAGE_SIZE;
+                        var buttons = new InlineKeyboardButton[][]
+                            {
+                        new[] { InlineKeyboardButton.WithCallbackData(Program.lm.Show_more_n_records(Math.Min(CONTLIST_PAGE_SIZE, totalN - (index + CONTLIST_PAGE_SIZE)))
+                        +"\t (Or type a filter)"
+                        , PAGE_PREFIX + pageIndex), }
+                            };
+                        var replyKeyboardMarkup = new InlineKeyboardMarkup(buttons.ToArray());
+                        var msg = await bot.SendTextMessageAsync(
+                            chatId: chatId,
+                            text: listHtml,
+                            parseMode: ParseMode.Html,
+                            replyMarkup: replyKeyboardMarkup
+                        );
+                        this.nextButtonShown = true;
+                        this.buttonMsgId = msg.MessageId;
+                        this.prevText = listHtml;
+                    }
+                    else
+                    {
+                        await bot.SendTextMessageAsync(chatId,
+                            text: listHtml,
+                            parseMode: ParseMode.Html);
+                    }
+
                 }
-
+                return (totalN > index + CONTLIST_PAGE_SIZE) || filterText != null;
             }
-            return (totalN > index + CONTLIST_PAGE_SIZE) || filterText!=null;
-
         }
         public override async Task<DialogResult> StartAsync(ITelegramBotClient bot, CancellationToken cancelationToken)
         {
@@ -123,7 +129,7 @@ namespace TgBot.Tasks
             }
             else
                 this.filterText = message.Text;
-            
+
             if (nextButtonShown)
             {
                 await bot.EditMessageReplyMarkupAsync(chatId, this.buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));
@@ -136,7 +142,7 @@ namespace TgBot.Tasks
         }
         public override async Task<DialogResult> HandleCallBackAsync(ITelegramBotClient bot, CallbackQuery callBack, CancellationToken cancelationToken)
         {
-            if(callBack.Data.IndexOf(PAGE_PREFIX)==0)
+            if (callBack.Data.IndexOf(PAGE_PREFIX) == 0)
             {
                 if (await ShowPageAsync(bot, pageIndex, cancelationToken))
                     return DialogResult.Handled;

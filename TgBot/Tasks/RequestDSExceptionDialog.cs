@@ -27,7 +27,9 @@ namespace TgBot.Tasks
         {
             this.RemoteWork = remoteWork;
         }
-
+        public override void SetServices(IServiceProvider services)
+        {
+        }
         public override FormDialogField GetFieldDef(string key)
         {
             switch(key)

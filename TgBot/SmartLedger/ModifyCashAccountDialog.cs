@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TgBot.SmartLedger.AccountReconciliation;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
@@ -23,14 +25,23 @@ namespace TgBot.SmartLedger
         const string FIELD_DATA = "String";
         public Guid CashAccountId { get; set; }
         public override string FirstField => FIELD_TYPE;
-        public ModifyCashAccountDialog(ChatId chatId,User from,Guid cahsAccountId)
-            :base(chatId,from)
+        SmartLedgerService service;
+        TgDbService tgService;
+
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+        public ModifyCashAccountDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid cahsAccountId)
+            : base(chatId, from)
         {
             this.CashAccountId = cahsAccountId;
+            this.service = service;
+            this.tgService = tgService;
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
             var account = service.GetCashAccount(this.CashAccountId);
             var oldConfig = service.GetRuleData<SimplePaymentFlowConfiguration>();
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
@@ -70,7 +81,7 @@ namespace TgBot.SmartLedger
                         account.Code = account.Code == null ? (string)FieldData[FIELD_DATA].Val() : null;
                         break;
                     case ModifyType.ReconcileAccount:
-                        await TGBot.PushDialog(from.Id.ToString(), new AccountReconciliationDialog(chatId, from, this.CashAccountId), cancellationToken);
+                        await TGBot.PushDialog(from.Id.ToString(), new AccountReconciliationDialog(service, tgService, chatId, from, this.CashAccountId), cancellationToken);
                         break;
                     default:
                         break;
@@ -83,11 +94,11 @@ namespace TgBot.SmartLedger
                     try
                     {
                         if (notifyPayer != null)
-                            await SetupFlowDialog.NotifyPayerAssignment(bot, notifyPayer.UserId,
+                            await SetupFlowDialog.NotifyPayerAssignment(bot,service,tgService, notifyPayer.UserId,
                                 oldPayer == null ? null : service.GetUserProfile(oldPayer).FullName, deposit, this.CashAccountId, cancellationToken);
 
                     }
-                    catch(Exception ex)
+                    catch (Exception ex)
                     {
                         Program.LogException("Error notifying groups and users", ex);
                     }
@@ -103,7 +114,6 @@ namespace TgBot.SmartLedger
         }
         public override FormDialogField GetFieldDef(string key)
         {
-            var service = new SmartLedgerService();
             var account = service.GetCashAccount(this.CashAccountId);
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             if (config == null)
@@ -122,12 +132,13 @@ namespace TgBot.SmartLedger
                             new FormFieldChoiceItem(ModifyType.ChangeType.ToString(), account.Code == null ? "Make Bank Account" : "Make Cash Account"),
                             new FormFieldChoiceItem(ModifyType.ReconcileAccount.ToString(), "Start Account Reconciliation")
                         },
-                        NextField = d => {
+                        NextField = d =>
+                        {
                             if ((ModifyType)d[FIELD_TYPE].Val() == ModifyType.ChangeType && account.Code != null)
                                 return Task.FromResult<String>(null);
                             return Task.FromResult(FIELD_DATA);
-                            },
-                        ParseFunction = (b, t, c) => Task.FromResult(new ParseResult { Data= Enum.Parse<ModifyType>(t) }),
+                        },
+                        ParseFunction = (b, t, c) => Task.FromResult(new ParseResult { Data = Enum.Parse<ModifyType>(t) }),
                     };
                 case FIELD_DATA:
                     String prompt;
@@ -165,10 +176,10 @@ namespace TgBot.SmartLedger
 
                     return new FormDialogField
                     {
-                        FieldType=fieldType,
-                        Prompt=prompt,
+                        FieldType = fieldType,
+                        Prompt = prompt,
                         Choices = choices,
-                        NextField=null,
+                        NextField = null,
                     };
 
             }

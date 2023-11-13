@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Threading.Tasks;
+using TgBot.SmartLedger;
 
 namespace TgBot.SocialLedger
 {
@@ -54,6 +55,11 @@ namespace TgBot.SocialLedger
     }
     public class SocialLedgerDb:DbContext
     {
+        public SocialLedgerDb(DbContextOptions<SocialLedgerDb> options) : base(options)
+        {
+
+        }
+
         public DbSet<LedgerPair> Ledgers { get; set; }
         public DbSet<SLTransaction> Transactions { get; set; }
         public DbSet<SLTransactionPictures> TransactionPictures { get; set; }
@@ -64,13 +70,14 @@ namespace TgBot.SocialLedger
             modelBuilder.Entity<TransactionCurrency>().HasData(new TransactionCurrency { Id = 2, Name = "EUR" });
             modelBuilder.Entity<TransactionCurrency>().HasData(new TransactionCurrency { Id = 3, Name = "Birr" });
         }
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlServer(Program.GetConnectionString("TGBot"));
-        }
+        
     }
     public class SocialLedgerDbService:ServiceBase<SocialLedgerDb>
     {
+        public SocialLedgerDbService(SocialLedgerDb db) : base(db)
+        {
+        }
+
         public LedgerPair GetLedgerPair(Guid id) => DbRead(db => db.Ledgers.AsNoTracking().Where(x => x.Id == id).FirstOrDefault());
 
         public Guid CreateRequest(String userId,String fullName)

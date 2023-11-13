@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,6 +10,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger;
 using TgBot.Tasks;
+using TgBot.TgDb;
 using static TgBot.FormDialog;
 
 namespace TgBot.Tasks
@@ -16,36 +18,36 @@ namespace TgBot.Tasks
     public class TaskDetailDialog : BotDialogBase
     {
         //manage task
-        
+
         const String COMMAND_ADD_DOCUMENT = "AddDoc";
         const String COMMAND_UPDATE = "Modify";
         const String COMMAND_COMMENT = "Comment";
-        
+
         const String COMMAND_COMMENT_REMOVE = "RemoveComment";
         const String COMMAND_COMMENT_UPDATE = "UpdateComment";
 
         const string COMMAND_FOLLOW = "Follow";
         const string COMMAND_JOIN = "Join";
-        const string COMMAND_LEAVE_TASK= "Leave";
+        const string COMMAND_LEAVE_TASK = "Leave";
         const string COMMAND_UNFOLLOW_TASK = "Unfollow";
 
-        const string COMMAND_ADD_USER= "AddUser";
+        const string COMMAND_ADD_USER = "AddUser";
         const string COMMAND_REMOVE_USER = "RemoveUser";
 
         const string COMMAND_CREATE_SUB_TASK = "CrateSubTask";
         const string COMMAND_CREATE_SUB_TASK_NEW = "CrateSubTaskNew";
-        const string COMMAND_CREATE_SUB_TASK_EXISTING= "CrateSubTaskExisting";
+        const string COMMAND_CREATE_SUB_TASK_EXISTING = "CrateSubTaskExisting";
         //state commands
         const string COMMAND_START = "Start";
         const string COMMAND_SUSPEND = "Susped";
         const string COMMAND_FINISHED = "Finished";
         const string COMMAND_RESTART = "Restart";
-        const string COMMAND_CANCEL= "Cancel";
+        const string COMMAND_CANCEL = "Cancel";
 
         //checklist
         const string COMMAND_DONE = "Done";
         const string COMMAND_NOT_DONE = "Not Done";
-        
+
         public Guid TaskId { get; set; }
         public String UserId { get; set; }
         public long ChatId() => long.Parse(UserId);
@@ -61,22 +63,40 @@ namespace TgBot.Tasks
         }
         public CommandStatus Status { get; set; } = CommandStatus.Main;
         public TaskCheckListItem SelectedCheckListItem { get; set; }
-
-        public TaskDetailDialog(String userId, Guid taskId) 
+        TaskDbService service;
+        TgDbService tgService;
+        public TaskDetailDialog(TaskDbService service, TgDbService tgService, String userId, Guid taskId)
         {
             this.TaskId = taskId;
             this.UserId = userId;
+            this.service = service;
+            this.tgService = tgService;
         }
-        public class AddSubTaskDialog:BotDialogBase
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<TaskDbService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+
+        public class AddSubTaskDialog : BotDialogBase
         {
             public Guid TaskId { get; set; }
             public ChatId ChatId { get; set; }
             public String UserId { get; set; }
-            public AddSubTaskDialog()
+            TaskDbService service;
+            TgDbService tgService;
+            public AddSubTaskDialog(TaskDbService service, TgDbService tgService)
             {
-
+                this.service = service;
+                this.tgService = tgService;
             }
-            public AddSubTaskDialog(TaskDetailDialog parent)
+            public override void SetServices(IServiceProvider services)
+            {
+                this.service = services.GetService<TaskDbService>();
+                this.tgService = services.GetService<TgDbService>();
+            }
+
+            public AddSubTaskDialog(TaskDbService service, TgDbService tgService, TaskDetailDialog parent) : this(service, tgService)
             {
                 this.ChatId = parent.ChatId();
                 this.TaskId = parent.TaskId;
@@ -86,7 +106,6 @@ namespace TgBot.Tasks
             {
                 if (message.Type == Telegram.Bot.Types.Enums.MessageType.Text)
                 {
-                    var service = new TaskDbService();
                     var task = service.GetTaskByCode(message.Text
                         .ToUpper()
                         .Replace(" ", "")
@@ -103,7 +122,7 @@ namespace TgBot.Tasks
                         var u = service.GetUserProfile(this.UserId);
                         var notif = $"{u.FullName} add subs task {task.CodeName} to {parent.CodeName}";
                         var notifgroup = $"{u.FullName} add subs task {task.CodeName} to {TaskBot.TaskLink(task.Id, task.CodeName)}";
-                        await TaskBot.NotifyGroups(bot, notif, cancelationToken);
+                        await TaskBot.NotifyGroups(bot, tgService, notif, cancelationToken);
                         await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, notifgroup, this.UserId, cancelationToken);
                     }
                     catch (Exception ex)
@@ -122,7 +141,6 @@ namespace TgBot.Tasks
         {
             if (child is CommentMenu)
             {
-                var service = new TaskDbService();
                 this.Status = CommandStatus.Main;
                 var menu = child as CommentMenu;
                 switch (menu.SelectedKey)
@@ -138,7 +156,7 @@ namespace TgBot.Tasks
                             var u = service.GetUserProfile(this.UserId);
                             var task = service.GetTask(this.TaskId);
                             service.RemoveComment(this.UserId, service.GetLastComment(this.TaskId).Id);
-                            await TaskBot.NotifyGroups(bot, $"{u.FullName} removed {Program.lm._pronoun_possessive(u.Gender)} comment on task {TaskBot.TaskLink(this.TaskId, task.CodeName)}",cancellationToken);
+                            await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} removed {Program.lm._pronoun_possessive(u.Gender)} comment on task {TaskBot.TaskLink(this.TaskId, task.CodeName)}", cancellationToken);
                             await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} removed {Program.lm._pronoun(u.Gender)} comment on task /{task.CodeName}", this.UserId, cancellationToken);
                             await this.UpdateDetail(bot, true, cancellationToken);
 
@@ -160,36 +178,34 @@ namespace TgBot.Tasks
                 await UpdateDetail(bot, true, cancellationToken);
                 return DialogResult.Handled;
             }
-            if(child is SubTaskMenu)
+            if (child is SubTaskMenu)
             {
-                var service = new TaskDbService();
                 this.Status = CommandStatus.Main;
                 var menu = child as SubTaskMenu;
                 switch (menu.SelectedKey)
                 {
                     case COMMAND_CREATE_SUB_TASK_NEW:
                         {
-                            await SetChildDialog(bot, new CreateTaskDialog(this.ChatId(), this.User(), parentTaskId: this.TaskId), cancellationToken);
+                            await SetChildDialog(bot, new CreateTaskDialog(service, tgService, this.ChatId(), this.User(), parentTaskId: this.TaskId), cancellationToken);
                             return DialogResult.Handled;
                         }
                     case COMMAND_CREATE_SUB_TASK_EXISTING:
                         {
-                            await SetChildDialog(bot, new AddSubTaskDialog(this), cancellationToken);
+                            await SetChildDialog(bot, new AddSubTaskDialog(service, tgService, this), cancellationToken);
                             return DialogResult.Handled;
                         }
                 }
                 await UpdateDetail(bot, true, cancellationToken);
                 return DialogResult.Handled;
             }
-            if(child is CreateTaskDialog)
+            if (child is CreateTaskDialog)
             {
                 await UpdateDetail(bot, true, cancellationToken);
                 return DialogResult.Handled;
             }
             var checkListMenu = child as CheckListMenu;
-            if(checkListMenu!=null)
+            if (checkListMenu != null)
             {
-                var service = new TaskDbService();
                 this.Status = CommandStatus.Main;
 
                 switch (checkListMenu.SelectedKey)
@@ -197,13 +213,13 @@ namespace TgBot.Tasks
                     case COMMAND_DONE:
                         if (SelectedCheckListItem.DoneTime == null)
                         {
-                            
+
                             SelectedCheckListItem.DoneTime = TGBot.Now();
                             service.UpdateCheckList(this.UserId, this.TaskId, new[] { SelectedCheckListItem });
                             await UpdateDetail(bot, true, cancellationToken);
                             var task = service.GetTask(this.TaskId);
                             var notif = $"{service.GetUserProfile(this.UserId).FullName} reported check list item: <strong>{this.SelectedCheckListItem.Name}</strong> of task {TaskBot.TaskLink(task.Id, task.CodeName)} as DONE";
-                            await TaskBot.NotifyGroups(bot, notif, cancellationToken);
+                            await TaskBot.NotifyGroups(bot, tgService, notif, cancellationToken);
                             return DialogResult.Handled;
                         }
                         break;
@@ -215,7 +231,7 @@ namespace TgBot.Tasks
                             await UpdateDetail(bot, true, cancellationToken);
                             var task = service.GetTask(this.TaskId);
                             var notif = $"{service.GetUserProfile(this.UserId).FullName} reported check list item: <strong>{this.SelectedCheckListItem.Name}</strong> of task {TaskBot.TaskLink(task.Id, task.CodeName)} as NOT DONE";
-                            await TaskBot.NotifyGroups(bot, notif, cancellationToken);
+                            await TaskBot.NotifyGroups(bot, tgService, notif, cancellationToken);
                             return DialogResult.Handled;
                         }
                         break;
@@ -227,7 +243,6 @@ namespace TgBot.Tasks
             var userListMenu = child as UserListMenu;
             if (userListMenu != null)
             {
-                var service = new TaskDbService();
                 var thisUser = service.GetUserProfile(this.UserId);
                 var user = service.GetUserProfile(userListMenu.SelectedKey);
                 var task = service.GetTask(this.TaskId);
@@ -235,13 +250,13 @@ namespace TgBot.Tasks
                 switch (userListMenu.Command)
                 {
                     case COMMAND_ADD_USER:
-                        service.AddTaskUser(this.UserId, this.TaskId, userListMenu.SelectedKey,TaskUserRole.Worker);
-                        await TaskBot.NotifyGroups(bot, $"{user.FullName} is added to task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}",true,cancellationToken);
-                        await TaskBot.NotifyUser(bot,userListMenu.SelectedKey, $"You are added to task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}.",cancellationToken);
+                        service.AddTaskUser(this.UserId, this.TaskId, userListMenu.SelectedKey, TaskUserRole.Worker);
+                        await TaskBot.NotifyGroups(bot, tgService, $"{user.FullName} is added to task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}", true, cancellationToken);
+                        await TaskBot.NotifyUser(bot, userListMenu.SelectedKey, $"You are added to task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}.", cancellationToken);
                         break;
                     case COMMAND_REMOVE_USER:
                         service.RemoveTaskUser(this.UserId, this.TaskId, userListMenu.SelectedKey);
-                        await TaskBot.NotifyGroups(bot, $"{user.FullName} is removed from task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}", true, cancellationToken);
+                        await TaskBot.NotifyGroups(bot, tgService, $"{user.FullName} is removed from task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}", true, cancellationToken);
                         await TaskBot.NotifyUser(bot, userListMenu.SelectedKey, $"You are removed from task: {TaskBot.TaskLink(this.TaskId, task.CodeName)} by {thisUser.FullName}.", cancellationToken);
                         break;
                 }
@@ -249,11 +264,10 @@ namespace TgBot.Tasks
                 return DialogResult.Handled;
             }
             var content = child as ContentListDialog;
-            if(content!=null)
+            if (content != null)
             {
-                var service = new TaskDbService();
                 var thisUser = service.GetUserProfile(this.UserId);
-                service.AddTaskContents(this.UserId, this.TaskId,content.Data());
+                service.AddTaskContents(this.UserId, this.TaskId, content.Data());
                 await UpdateDetail(bot, true, cancellationToken);
                 return DialogResult.Handled;
 
@@ -263,18 +277,18 @@ namespace TgBot.Tasks
 
         public override async Task<DialogResult> StartAsync(ITelegramBotClient bot, CancellationToken cancelationToken)
         {
-            var html = TaskBot.FormatTaskDetailHtml(this.TaskId,new TaskBot.TaskFormatOptions());
-            this.MessageId=(await bot.SendTextMessageAsync(ChatId(),
+            var html = TaskBot.FormatTaskDetailHtml(this.TaskId, new TaskBot.TaskFormatOptions());
+            this.MessageId = (await bot.SendTextMessageAsync(ChatId(),
                 html
                 , parseMode: Telegram.Bot.Types.Enums.ParseMode.Html
-                ,replyMarkup: FormDialog.CreateInlineButtons(GetCommands(),2)
+                , replyMarkup: FormDialog.CreateInlineButtons(GetCommands(), 2)
                 )).MessageId;
             return DialogResult.Handled;
         }
-        public List<KeyValuePair<String,String>> GetCommands()
+        public List<KeyValuePair<String, String>> GetCommands()
         {
 
-            var service = new TaskDbService();
+
             var user = service.GetUserProfile(this.UserId);
             var choices = new List<KeyValuePair<String, String>>();
             if (user != null && user.Permitted)
@@ -294,7 +308,7 @@ namespace TgBot.Tasks
                         {
                             choices.Add(new(COMMAND_START, "Started"));
                             choices.Add(new(COMMAND_CANCEL, "Canceled"));
-                        }                            
+                        }
                         break;
                     case Tasks.TaskStatus.Started:
                         if (userRole == TaskUserRole.Worker)
@@ -314,23 +328,23 @@ namespace TgBot.Tasks
                 }
                 if (userRole == TaskUserRole.Worker || isCreator)
                 {
-                    choices.Add(new (COMMAND_ADD_DOCUMENT, "Add Document"));
-                    choices.Add(new (COMMAND_UPDATE, "Modify Task Info"));
+                    choices.Add(new(COMMAND_ADD_DOCUMENT, "Add Document"));
+                    choices.Add(new(COMMAND_UPDATE, "Modify Task Info"));
                 }
-                
+
                 //choices.Add(new (COMMAND_COMMENT, "Comment"));
                 if (userRole == TaskUserRole.None)
-                    choices.Add(new (COMMAND_FOLLOW, "Follow Task"));
+                    choices.Add(new(COMMAND_FOLLOW, "Follow Task"));
                 if (userRole != TaskUserRole.Worker)
-                    choices.Add(new (COMMAND_JOIN, "Join Task"));
+                    choices.Add(new(COMMAND_JOIN, "Join Task"));
                 if (isCreator || userRole == TaskUserRole.Worker)
                 {
                     if (userRole == TaskUserRole.Follower)
                         choices.Add(new(COMMAND_UNFOLLOW_TASK, "Stop Following Task"));
                     if (userRole == TaskUserRole.Worker)
                         choices.Add(new(COMMAND_LEAVE_TASK, "Leave Task"));
-                    choices.Add(new (COMMAND_ADD_USER, "Add Member"));
-                    choices.Add(new (COMMAND_REMOVE_USER, "Remove Member"));
+                    choices.Add(new(COMMAND_ADD_USER, "Add Member"));
+                    choices.Add(new(COMMAND_REMOVE_USER, "Remove Member"));
                     choices.Add(new(COMMAND_CREATE_SUB_TASK, "Add Subtask"));
                 }
                 choices.Add(new(COMMAND_COMMENT, "Comment"));
@@ -341,9 +355,9 @@ namespace TgBot.Tasks
         {
             if (this.Status == CommandStatus.Main)
             {
-                var service = new TaskDbService();
+
                 Func<MisTask> task = () => service.GetTask(TaskId);
-                Func<List<MisUserProfile>> taskusers = ()=>service.GetTaskUsers(TaskId, TaskUserRole.Worker);
+                Func<List<MisUserProfile>> taskusers = () => service.GetTaskUsers(TaskId, TaskUserRole.Worker);
                 Func<MisUserProfile> user = () => service.GetUserProfile(this.UserId);
 
                 switch (callBack.Data)
@@ -366,9 +380,9 @@ namespace TgBot.Tasks
                             service.StartTask(this.UserId, this.TaskId);
                             var u = user();
                             var t = task();
-                            await TaskBot.NotifyGroups(bot, $"{u.FullName} started task {TaskBot.TaskLink(t.Id, t.CodeName)}",cancellationToken);
-                            await TaskBot.NotifyWorkersAndFollowers(bot,this.TaskId, $"{u.FullName} started task /{t.CodeName}", this.UserId, cancellationToken);
-                            await this.UpdateDetail(bot,true,cancellationToken);
+                            await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} started task {TaskBot.TaskLink(t.Id, t.CodeName)}", cancellationToken);
+                            await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} started task /{t.CodeName}", this.UserId, cancellationToken);
+                            await this.UpdateDetail(bot, true, cancellationToken);
                             return DialogResult.Handled;
                         }
                     case COMMAND_FINISHED:
@@ -376,7 +390,7 @@ namespace TgBot.Tasks
                             service.FinishTask(this.UserId, this.TaskId);
                             var u = user();
                             var t = task();
-                            await TaskBot.NotifyGroups(bot, $"{u.FullName} finished task {TaskBot.TaskLink(t.Id, t.CodeName)}", cancellationToken);
+                            await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} finished task {TaskBot.TaskLink(t.Id, t.CodeName)}", cancellationToken);
                             await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} finished task /{t.CodeName}", this.UserId, cancellationToken);
                             await this.UpdateDetail(bot, true, cancellationToken);
                             return DialogResult.Handled;
@@ -386,9 +400,9 @@ namespace TgBot.Tasks
                             service.CancelTask(this.UserId, this.TaskId);
                             var u = user();
                             var t = task();
-                            await TaskBot.NotifyGroups(bot, $"{u.FullName} canceled task {TaskBot.TaskLink(t.Id, t.CodeName)}", cancellationToken);
+                            await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} canceled task {TaskBot.TaskLink(t.Id, t.CodeName)}", cancellationToken);
                             await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} canceled task /{t.CodeName}", this.UserId, cancellationToken);
-                            await this.UpdateDetail(bot, true,cancellationToken);
+                            await this.UpdateDetail(bot, true, cancellationToken);
                             return DialogResult.Handled;
                         }
                     case COMMAND_SUSPEND:
@@ -410,7 +424,7 @@ namespace TgBot.Tasks
                             }
                             else
                                 await bot.SendTextMessageAsync(ChatId(), "There is no one left to add", cancellationToken: cancellationToken);
-                            
+
                             return DialogResult.Handled;
                         }
                     case COMMAND_REMOVE_USER:
@@ -430,17 +444,17 @@ namespace TgBot.Tasks
                         }
                     case COMMAND_CREATE_SUB_TASK:
                         {
-                            await SetChildDialog(bot, new SubTaskMenu(this),cancellationToken);
+                            await SetChildDialog(bot, new SubTaskMenu(this), cancellationToken);
                             return DialogResult.Handled;
                         };
                     case COMMAND_JOIN:
                         service.AddTaskUser(this.UserId, this.TaskId, this.UserId, TaskUserRole.Worker);
-                        await TaskBot.NotifyGroups(bot, $"{user().FullName} joined task: {TaskBot.TaskLink(this.TaskId,task().CodeName)}", true, cancellationToken);
+                        await TaskBot.NotifyGroups(bot, tgService, $"{user().FullName} joined task: {TaskBot.TaskLink(this.TaskId, task().CodeName)}", true, cancellationToken);
                         await this.UpdateDetail(bot, true, cancellationToken);
                         return DialogResult.Handled;
                     case COMMAND_LEAVE_TASK:
                         service.RemoveTaskUser(this.UserId, this.TaskId, this.UserId);
-                        await TaskBot.NotifyGroups(bot, $"{user().FullName} left task: {TaskBot.TaskLink(this.TaskId, task().CodeName)}", true, cancellationToken);
+                        await TaskBot.NotifyGroups(bot, tgService, $"{user().FullName} left task: {TaskBot.TaskLink(this.TaskId, task().CodeName)}", true, cancellationToken);
                         await this.UpdateDetail(bot, true, cancellationToken);
                         return DialogResult.Handled;
                     case COMMAND_FOLLOW:
@@ -452,10 +466,10 @@ namespace TgBot.Tasks
                         await this.UpdateDetail(bot, true, cancellationToken);
                         return DialogResult.Handled;
                     case COMMAND_ADD_DOCUMENT:
-                        await this.SetChildDialog(bot,new ContentListDialog(this.UserId, "Add urls and attachments"), cancellationToken);
+                        await this.SetChildDialog(bot, new ContentListDialog(this.UserId, "Add urls and attachments"), cancellationToken);
                         return DialogResult.Handled;
                     case COMMAND_UPDATE:
-                        await TGBot.PushDialog(this.UserId, new TaskEditorDialog(this.UserId, this.TaskId), cancellationToken);
+                        await TGBot.PushDialog(this.UserId, new TaskEditorDialog(service, tgService, this.UserId, this.TaskId), cancellationToken);
                         return DialogResult.Handled;
                 }
             }
@@ -463,7 +477,7 @@ namespace TgBot.Tasks
             {
                 switch (callBack.Data)
                 {
-                    
+
                 }
                 await UpdateDetail(bot, true, cancellationToken); //nothing changed
                 return DialogResult.Handled;
@@ -475,7 +489,7 @@ namespace TgBot.Tasks
             await base.HandleCancel(bot, cancelationToken);
             try
             {
-                await bot.EditMessageReplyMarkupAsync(this.ChatId(), this.MessageId, 
+                await bot.EditMessageReplyMarkupAsync(this.ChatId(), this.MessageId,
                     new InlineKeyboardMarkup(new InlineKeyboardButton[] { }));
             }
             catch (Exception ex)
@@ -484,14 +498,14 @@ namespace TgBot.Tasks
             }
             return DialogResult.Terminated;
         }
-        public class CheckListMenu:MenuDialog
+        public class CheckListMenu : MenuDialog
         {
-            public CheckListMenu():base(null,null,null)
+            public CheckListMenu() : base(null, null, null)
             {
 
             }
-            public CheckListMenu(TaskDetailDialog parent):
-                base(parent.ChatId(),parent.User(), new[] {
+            public CheckListMenu(TaskDetailDialog parent) :
+                base(parent.ChatId(), parent.User(), new[] {
                         new FormFieldChoiceItem(TaskDetailDialog.COMMAND_DONE,"Yes, it is done"),
                         new FormFieldChoiceItem(TaskDetailDialog.COMMAND_NOT_DONE,"No, it isn't done"),
                         },
@@ -503,19 +517,19 @@ namespace TgBot.Tasks
         public class UserListMenu : MenuDialog
         {
             public String Command { get; set; }
-            public UserListMenu():base(null,null,null)
+            public UserListMenu() : base(null, null, null)
             {
 
             }
             public UserListMenu(TaskDetailDialog parent,
                 String command,
-                IEnumerable<MisUserProfile> users,String prompt) :
-                base(parent.ChatId(), 
-                    parent.User(), 
-                    users.Select(x=>new FormFieldChoiceItem(x.UserId,x.FullName)).ToList(),
+                IEnumerable<MisUserProfile> users, String prompt) :
+                base(parent.ChatId(),
+                    parent.User(),
+                    users.Select(x => new FormFieldChoiceItem(x.UserId, x.FullName)).ToList(),
                     prompt)
             {
-                this.Command=command;
+                this.Command = command;
             }
         }
         public class SubTaskMenu : MenuDialog
@@ -535,7 +549,7 @@ namespace TgBot.Tasks
             }
         }
 
-        public class CommentMenu: MenuDialog
+        public class CommentMenu : MenuDialog
         {
             public CommentMenu() : base(null, null, null)
             {
@@ -554,9 +568,9 @@ namespace TgBot.Tasks
         }
         public override async Task<DialogResult> HandleMessageAsync(ITelegramBotClient bot, Message message, CancellationToken cancelationToken)
         {
-            var service = new TaskDbService();
+
             var task = service.GetTask(this.TaskId);
-            var chk= service.GetTaskCheckList(this.TaskId);
+            var chk = service.GetTaskCheckList(this.TaskId);
             if (message.Text.StartsWith("/chk")) //checklist toggle
             {
                 int index;
@@ -564,16 +578,16 @@ namespace TgBot.Tasks
                 {
                     this.Status = CommandStatus.CheckList;
                     this.SelectedCheckListItem = chk[index - 1];
-                    await base.SetChildDialog(bot, new CheckListMenu(this),cancelationToken);
+                    await base.SetChildDialog(bot, new CheckListMenu(this), cancelationToken);
                 }
                 return DialogResult.Handled;
             }
-            if(Status==CommandStatus.Comment)
+            if (Status == CommandStatus.Comment)
             {
                 service.AddComment(this.UserId, this.TaskId, message.Text);
                 Status = CommandStatus.Main;
                 var u = service.GetUserProfile(this.UserId);
-                await TaskBot.NotifyGroups(bot, $"{u.FullName} commented on task {TaskBot.TaskLink(this.TaskId, task.CodeName)}\n<i>{HttpUtility.HtmlEncode(message.Text)}</i>", cancelationToken);
+                await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} commented on task {TaskBot.TaskLink(this.TaskId, task.CodeName)}\n<i>{HttpUtility.HtmlEncode(message.Text)}</i>", cancelationToken);
                 await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} commented on task /{task.CodeName}\n<i>{HttpUtility.HtmlEncode(message.Text)}</i>", this.UserId, cancelationToken);
                 await this.UpdateDetail(bot, true, cancelationToken);
                 return DialogResult.Handled;
@@ -583,16 +597,16 @@ namespace TgBot.Tasks
                 service.AddComment(this.UserId, this.TaskId, message.Text);
                 Status = CommandStatus.Main;
                 var u = service.GetUserProfile(this.UserId);
-                await TaskBot.NotifyGroups(bot, $"{u.FullName} updated {Program.lm._pronoun_possessive(u.Gender)} comment on task {TaskBot.TaskLink(this.TaskId, task.CodeName)}\n<i>{HttpUtility.HtmlEncode(message.Text)}</i>", cancelationToken);
+                await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} updated {Program.lm._pronoun_possessive(u.Gender)} comment on task {TaskBot.TaskLink(this.TaskId, task.CodeName)}\n<i>{HttpUtility.HtmlEncode(message.Text)}</i>", cancelationToken);
                 await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} updated {Program.lm._pronoun(u.Gender)} comment on task /{task.CodeName}\n<i>{HttpUtility.HtmlEncode(message.Text)}</i>", this.UserId, cancelationToken);
                 await this.UpdateDetail(bot, true, cancelationToken);
                 return DialogResult.Handled;
             }
-            if (Status==CommandStatus.SuspendReason)
+            if (Status == CommandStatus.SuspendReason)
             {
-                service.PauseTask(this.UserId, this.TaskId,message.Text);
+                service.PauseTask(this.UserId, this.TaskId, message.Text);
                 var u = service.GetUserProfile(this.UserId);
-                await TaskBot.NotifyGroups(bot, $"{u.FullName} suspeded task {TaskBot.TaskLink(task.Id, task.CodeName)}", cancelationToken);
+                await TaskBot.NotifyGroups(bot, tgService, $"{u.FullName} suspeded task {TaskBot.TaskLink(task.Id, task.CodeName)}", cancelationToken);
                 await TaskBot.NotifyWorkersAndFollowers(bot, this.TaskId, $"{u.FullName} suspeded task {task.CodeName}", this.UserId, cancelationToken);
                 await this.UpdateDetail(bot, true, cancelationToken);
                 return DialogResult.Handled;
@@ -602,14 +616,14 @@ namespace TgBot.Tasks
 
         private async Task UpdateDetail(ITelegramBotClient bot, bool delete, CancellationToken cancellationToken)
         {
-            var html = TaskBot.FormatTaskDetailHtml(this.TaskId,new TaskBot.TaskFormatOptions());
+            var html = TaskBot.FormatTaskDetailHtml(this.TaskId, new TaskBot.TaskFormatOptions());
             if (delete)
             {
                 await bot.DeleteMessageAsync(ChatId(), MessageId);
                 this.MessageId = (await bot.SendTextMessageAsync(ChatId(),
                         html
                         , parseMode: Telegram.Bot.Types.Enums.ParseMode.Html
-                        , replyMarkup: FormDialog.CreateInlineButtons(GetCommands(),2)
+                        , replyMarkup: FormDialog.CreateInlineButtons(GetCommands(), 2)
                         )).MessageId;
             }
             else
@@ -617,7 +631,7 @@ namespace TgBot.Tasks
                 await bot.EditMessageTextAsync(ChatId(), this.MessageId,
                             html,
                         parseMode: Telegram.Bot.Types.Enums.ParseMode.Html,
-                        replyMarkup: FormDialog.CreateInlineButtons(GetCommands(),2)
+                        replyMarkup: FormDialog.CreateInlineButtons(GetCommands(), 2)
                     );
             }
         }

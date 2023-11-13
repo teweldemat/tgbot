@@ -4,6 +4,8 @@ using System;
 using Telegram.Bot.Types;
 using Telegram.Bot;
 using Microsoft.CodeAnalysis;
+using TgBot.TgDb;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TgBot.SmartLedger.AccountReconciliation
 {
@@ -12,11 +14,20 @@ namespace TgBot.SmartLedger.AccountReconciliation
         const String FIELD_NOTE = "Note";
         public Guid ReconciliationId { get; set; }
         public override string FirstField => FIELD_NOTE;
+        SmartLedgerService service;
 
-        public ReconciliationApproveDialog(ChatId chatId, User from, Guid reconciliationId) : base(chatId, from)
+        public ReconciliationApproveDialog(SmartLedgerService service, ChatId chatId, User from, Guid reconciliationId) : base(chatId, from)
         {
             this.ReconciliationId = reconciliationId;
+            this.service = service;
         }
+
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+
+        }
+
 
         public override FormDialogField GetFieldDef(string key)
         {
@@ -35,7 +46,6 @@ namespace TgBot.SmartLedger.AccountReconciliation
 
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
 
             var reconciliation = service.GetReconciliation(this.ReconciliationId);
             if (reconciliation == null)
@@ -57,12 +67,17 @@ namespace TgBot.SmartLedger.AccountReconciliation
         const String FIELD_NOTE = "Note";
         public Guid ReconciliationId { get; set; }
         public override string FirstField => FIELD_NOTE;
+        SmartLedgerService service;
 
-        public ReconciliationRejectDialog(ChatId chatId, User from, Guid reconciliationId) : base(chatId, from)
+        public ReconciliationRejectDialog(SmartLedgerService service, ChatId chatId, User from, Guid reconciliationId) : base(chatId, from)
         {
             this.ReconciliationId = reconciliationId;
+            this.service = service;
         }
-
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+        }
         public override FormDialogField GetFieldDef(string key)
         {
             switch (key)
@@ -80,7 +95,6 @@ namespace TgBot.SmartLedger.AccountReconciliation
 
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
             var reconciliation = service.GetReconciliation(this.ReconciliationId);
             if (reconciliation == null)
                 throw new InvalidOperationException($"Reconciliation {this.ReconciliationId} is invalid");

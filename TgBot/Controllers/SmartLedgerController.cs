@@ -18,6 +18,12 @@ namespace TgBot.Controllers
 
     public class SmartLedgerController : Controller
     {
+
+        SmartLedgerService service;
+        public SmartLedgerController(SmartLedgerService service)
+        {
+            this.service = service;
+        }
         public class ReconciliationViewModel
         {
             public class WorkItemAttachment
@@ -51,7 +57,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new SmartLedger.SmartLedgerService();
                 var picData = service.GetPicture(Guid.Parse(id));
                 if (picData == null || picData.Image == null)
                     throw new Exception("Attachment doesn't exist");
@@ -80,7 +85,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new SmartLedger.SmartLedgerService();
                 var picData = service.GetPicture(Guid.Parse(id));
                 if (picData == null || picData.Image == null)
                     throw new Exception("Picture doesn't exist");
@@ -161,7 +165,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new SmartLedger.SmartLedgerService();
                 var payment = service.GetPayment(Guid.Parse(id));
                 if (payment == null)
                     throw new Exception("Invalid payment id:" + id);
@@ -224,7 +227,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new SmartLedger.SmartLedgerService();
                 var reconciliation = service.GetReconciliation(Guid.Parse(id));
                 if (reconciliation == null)
                     throw new Exception("Invalid reconciliation id:" + id);
@@ -298,7 +300,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new SmartLedger.SmartLedgerService();
                 var account = service.GetCashAccount(Guid.Parse(accountId));
                 if (account == null)
                     throw new Exception("Invalid account id:" + accountId);
@@ -376,7 +377,6 @@ namespace TgBot.Controllers
         {
             try
             {
-                var service = new SmartLedger.SmartLedgerService();
                 var request = service.GetOpenPayments(0,-1,out var N,true);
                 var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
                 Func<IEnumerable<Payment>, Tuple<IEnumerable<SummaryViewModel.RequestViewModel>, String>>

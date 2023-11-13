@@ -1,10 +1,12 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
@@ -27,15 +29,22 @@ namespace TgBot.SmartLedger
         public Guid PaymentId { get; set; }
 
         public override string FirstField => FIELD_COMAND;
-
-        public PaymentDetailDialog(ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public PaymentDetailDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(chatId, from)
         {
             this.PaymentId = paymentId;
+            this.service = service;
+            this.tgService = tgService;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
         }
         public override FormDialogField GetFieldDef(string key)
         {
 
-            var service = new SmartLedgerService();
             var payment = service.GetPayment(PaymentId);
             var choices = new List<FormFieldChoiceItem>();
             var w = payment.WorkItemHead == null ? null : service.GetWorkItem(payment.WorkItemHead.Value);
@@ -58,7 +67,7 @@ namespace TgBot.SmartLedger
                     choices.Add(new FormFieldChoiceItem(COMMAND_CHECK_REJECT, "Reject"));
                 }
 
-                
+
                 var sources = service.GetPaymentSources(payment.Id);
 
                 //first approval
@@ -134,46 +143,46 @@ namespace TgBot.SmartLedger
                     {
                         if (x.WorkType == PaymentWorkItem.WORK_TYPE_PAY)
                         {
-                            foreach(var acid in config.GetAccountsOfPayer(x.UserId, payment.IsDeposit))
-                                if(sourcesByGuid.ContainsKey(acid))
+                            foreach (var acid in config.GetAccountsOfPayer(x.UserId, payment.IsDeposit))
+                                if (sourcesByGuid.ContainsKey(acid))
                                     totalPaid += sourcesByGuid[acid].Amount;
                         }
                         return true;
                     });
                 }
-                bool paymentStage = 
+                bool paymentStage =
                     w.WorkType == PaymentWorkItem.WORK_TYPE_APPROVE
                     || w.WorkType == PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_PAYMENT
                     || (w.WorkType == PaymentWorkItem.WORK_TYPE_PAY && totalPaid < payment.Amount);
 
                 //payment
-                if (paymentStage && config.IsPayer(base.from.Id.ToString(), sources,payment.IsDeposit)
+                if (paymentStage && config.IsPayer(base.from.Id.ToString(), sources, payment.IsDeposit)
                     )
                 {
                     foreach (var s in sources)
                     {
 
-                        if (config.IsPayer(from.Id.ToString(), s.CashAccountId,payment.IsDeposit))
+                        if (config.IsPayer(from.Id.ToString(), s.CashAccountId, payment.IsDeposit))
                         {
                             String str;
-                            if(payment.IsDeposit)
-                                str= $"Deposit {IntData.toString(-s.Amount)} Birr to {service.GetCashAccount(s.CashAccountId).Name}";
+                            if (payment.IsDeposit)
+                                str = $"Deposit {IntData.toString(-s.Amount)} Birr to {service.GetCashAccount(s.CashAccountId).Name}";
                             else
                                 str = $"Pay {IntData.toString(s.Amount)} Birr from {service.GetCashAccount(s.CashAccountId).Name}";
                             PaymentInst += "<pre>\n</pre>" + str;
-                            if(!String.IsNullOrEmpty(s.PaymentInstruction))
+                            if (!String.IsNullOrEmpty(s.PaymentInstruction))
                                 PaymentInst += $"<pre>\n</pre> {s.PaymentInstruction}";
                         }
                     }
-                    
-                    choices.Add(new FormFieldChoiceItem(COMMAND_PAY, payment.IsDeposit?"Received":"Paid"));
+
+                    choices.Add(new FormFieldChoiceItem(COMMAND_PAY, payment.IsDeposit ? "Received" : "Paid"));
                     choices.Add(new FormFieldChoiceItem(COMMAND_CANT_PAY, payment.IsDeposit ? "Can't Receive" : "Can't Pay"));
                 }
 
 
                 //accounting
-                if ((w.WorkType == PaymentWorkItem.WORK_TYPE_PAY 
-                    && !paymentStage 
+                if ((w.WorkType == PaymentWorkItem.WORK_TYPE_PAY
+                    && !paymentStage
                     && from.Id.ToString().Equals(config.Accountant))
                     || w.WorkType == PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_ACCOUNTING
                     )
@@ -193,48 +202,48 @@ namespace TgBot.SmartLedger
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
             var command = this.FieldData[FIELD_COMAND].Val<String>();
-            
+
             switch (command)
             {
                 case COMMAND_CHECK:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new CheckAcceptDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new CheckAcceptDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_CHECK_REJECT:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new CheckRejectDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new CheckRejectDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_APPROVE_REJECT:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveRejectDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveRejectDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_APPROVE_REJECT_REVERSE_PAYMENT:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveRejectDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveRejectDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_PAY:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new PayDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new PayDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_CANT_PAY:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new PayRejectDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new PayRejectDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_ACCOUNT:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new AccountDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new AccountDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_APPROVE:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(this.chatId, this.from, this.PaymentId), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(service, tgService, this.chatId, this.from, this.PaymentId), cancellationToken);
                     break;
                 case COMMAND_SEND_BACK_TO_PAYMENT:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(this.chatId, this.from, this.PaymentId,approveType:PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_PAYMENT), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(service, tgService, this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_PAYMENT), cancellationToken);
                     break;
                 case COMMAND_SEND_BANK_TO_ACCOUNTING:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_ACCOUNTING), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(service, tgService, this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_ACCOUNTING), cancellationToken);
                     break;
                 case COMMAND_CLOSE:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_CLOSE), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(service, tgService, this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_CLOSE), cancellationToken);
                     break;
                 case COMMAND_RESTART:
-                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_RESTART), cancellationToken);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new ApproveAcceptDialog(service, tgService, this.chatId, this.from, this.PaymentId, approveType: PaymentWorkItem.WORK_TYPE_RESTART), cancellationToken);
                     break;
                 case COMMAND_UPDATE_REQUEST:
-                    var payment = new SmartLedgerService().GetPayment(this.PaymentId);
-                    await TGBot.PushDialog(this.from.Id.ToString(), new RequestPaymentDialog(this.chatId, this.from,paymentType:payment.PaymentType,  restartPayment: this.PaymentId), cancellationToken);
+                    var payment = service.GetPayment(this.PaymentId);
+                    await TGBot.PushDialog(this.from.Id.ToString(), new RequestPaymentDialog(service,tgService, this.chatId, this.from, paymentType: payment.PaymentType, restartPayment: this.PaymentId), cancellationToken);
                     break;
 
             }

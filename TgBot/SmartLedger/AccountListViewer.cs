@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -8,22 +9,32 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger.AccountReconciliation;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
-    class AccountListViewer :BotDialogBase
+    class AccountListViewer : BotDialogBase
     {
         public ChatId chatId;
         public User user;
         public ModifyCashAccountDialog ModifyDialog { get; set; } = null;
         public CashAccount SelectedAccount { get; set; }
         public List<CashAccount> Accounts { get; set; }
-        public AccountListViewer(ChatId chatId, User user)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public AccountListViewer(SmartLedgerService service,TgDbService tgService, ChatId chatId, User user)
         {
             this.chatId = chatId;
-            this.user = user;
+            this.user = user; 
+            this.service = service;
+            this.tgService = tgService;
         }
-        public static string FormatAccount(SmartLedgerService coreService, CashAccount account,String numLabel)
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+        public static string FormatAccount(SmartLedgerService coreService, CashAccount account, String numLabel)
         {
 
             var html = $"{numLabel} {account.Name} {IntData.toString(account.Balance)} Birr";
@@ -31,7 +42,6 @@ namespace TgBot.SmartLedger
         }
         public String FormatAccountDetail(CashAccount account)
         {
-            var service = new SmartLedgerService();
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             String payer = null;
             String depositor = null;
@@ -64,24 +74,24 @@ namespace TgBot.SmartLedger
             var html = $"<strong>Account Name:</strong> {ac.Name}"
                     + $"<pre>\n</pre><strong>Account Type:</strong> {(String.IsNullOrEmpty(ac.Code) ? "Cash on Hand" : "Bank")}"
                     + $"<pre>\n</pre><strong>Balance:</strong> {IntData.toString(ac.Balance)}"
-                    + $"<pre>\n</pre><strong>Payer:</strong> { payer}"
-                    + $"<pre>\n</pre><strong>Depositor:</strong> { depositor}"
-                    + (account.Code==null?"":$"<pre>\n</pre><strong>Account #:</strong> {account.Code}")
+                    + $"<pre>\n</pre><strong>Payer:</strong> {payer}"
+                    + $"<pre>\n</pre><strong>Depositor:</strong> {depositor}"
+                    + (account.Code == null ? "" : $"<pre>\n</pre><strong>Account #:</strong> {account.Code}")
                     + $"<pre>\n</pre><a href=\"{SmartLedgerBot.GetLedgerLink(ac.Id)}\">Ledger</a>"
                     ;
             return html;
         }
         public override async Task<DialogResult> HandleCallBackAsync(ITelegramBotClient bot, CallbackQuery callBack, CancellationToken cancellationToken)
         {
-            if(this.ModifyDialog!=null)
+            if (this.ModifyDialog != null)
             {
-                switch(await this.ModifyDialog.HandleCallBackAsync(bot, callBack, cancellationToken))
+                switch (await this.ModifyDialog.HandleCallBackAsync(bot, callBack, cancellationToken))
                 {
                     case DialogResult.Handled:
                         return DialogResult.Handled;
                     case DialogResult.Terminated:
                         this.ModifyDialog = null;
-                        this.SelectedAccount = new SmartLedgerService().GetCashAccount(this.SelectedAccount.Id);
+                        this.SelectedAccount = service.GetCashAccount(this.SelectedAccount.Id);
                         await DisplayAccountDetail(bot);
                         return DialogResult.Handled;
                 }
@@ -89,11 +99,11 @@ namespace TgBot.SmartLedger
             switch (callBack.Data)
             {
                 case "Modify":
-                    this.ModifyDialog = new ModifyCashAccountDialog(this.chatId, this.user, this.SelectedAccount.Id);
+                    this.ModifyDialog = new ModifyCashAccountDialog(service,tgService,this.chatId, this.user, this.SelectedAccount.Id);
                     await this.ModifyDialog.StartAsync(bot, cancellationToken);
                     return DialogResult.Handled;
                 case "Reconcile":
-                    await TGBot.PushDialog(this.user.Id.ToString(), new AccountReconciliationDialog(this.chatId, this.user, this.SelectedAccount.Id), cancellationToken);
+                    await TGBot.PushDialog(this.user.Id.ToString(), new AccountReconciliationDialog(service,tgService, this.chatId, this.user, this.SelectedAccount.Id), cancellationToken);
                     break;
             }
             return DialogResult.Continue;
@@ -108,7 +118,7 @@ namespace TgBot.SmartLedger
                         return DialogResult.Handled;
                     case DialogResult.Terminated:
                         this.ModifyDialog = null;
-                        this.SelectedAccount = new SmartLedgerService().GetCashAccount(this.SelectedAccount.Id);
+                        this.SelectedAccount = service.GetCashAccount(this.SelectedAccount.Id);
                         await DisplayAccountDetail(bot);
                         return DialogResult.Handled;
                 }
@@ -116,7 +126,7 @@ namespace TgBot.SmartLedger
             int n;
             if (int.TryParse(message.Text.Trim(), out n))
             {
-                if(n>=1 && n<=Accounts.Count)
+                if (n >= 1 && n <= Accounts.Count)
                 {
                     this.SelectedAccount = this.Accounts[n - 1];
                     await DisplayAccountDetail(bot);
@@ -128,8 +138,7 @@ namespace TgBot.SmartLedger
 
         private async Task DisplayAccountDetail(ITelegramBotClient bot)
         {
-            
-            var service = new SmartLedgerService();
+
             var e = service.GetEntity();
             var buttons = new List<InlineKeyboardButton[]>();
             if (e != null && e.Owner.Equals(user.Id.ToString()))
@@ -137,7 +146,7 @@ namespace TgBot.SmartLedger
                 buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("Modify", "Modify") });
             }
             var conf = service.GetRuleData<SimplePaymentFlowConfiguration>();
-            if (conf!=null && conf.Accountant==user.Id.ToString())
+            if (conf != null && conf.Accountant == user.Id.ToString())
             {
                 buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("Reconcile", "Reconcile") });
             }
@@ -148,11 +157,10 @@ namespace TgBot.SmartLedger
                 replyMarkup: replyMarkup);
         }
 
-        async Task ShowPageAsync(ITelegramBotClient bot,int index, CancellationToken cancelationToken)
+        async Task ShowPageAsync(ITelegramBotClient bot, int index, CancellationToken cancelationToken)
         {
-            
-            var coreService = new SmartLedgerService();
-            Accounts= coreService.GetCashAccounts();
+
+            Accounts = service.GetCashAccounts();
             if (Accounts.Count == 0)
             {
                 await bot.SendTextMessageAsync(chatId, "No account created");
@@ -163,7 +171,7 @@ namespace TgBot.SmartLedger
                 String listHtml = null;
                 foreach (var f in Accounts)
                 {
-                    var html = FormatAccount(coreService, f, $"{index + n}. ");
+                    var html = FormatAccount(service, f, $"{index + n}. ");
                     listHtml = listHtml == null ? html : (listHtml + "<pre>\n</pre>" + html);
                     n++;
                 }
@@ -178,6 +186,6 @@ namespace TgBot.SmartLedger
         {
             await ShowPageAsync(bot, 0, cancelationToken);
             return DialogResult.Handled;
-        }        
+        }
     }
 }

@@ -6,22 +6,30 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TgBot.SmartLedger;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TgBot.Exchange.TgDialogs
 {
-    public class RegisterDialog:FormDialog 
+    public class RegisterDialog : FormDialog
     {
         const string FIELD_FIRST_NAME = "SpecifyName";
         const string FIELD_LAST_NAME = "SpecifiySurname";
         const string FIELD_SHORT_NAME = "ShortName";
-        const String FIELD_GENDER= "Gender";
+        const String FIELD_GENDER = "Gender";
         const String FIELD_BIRTH_YEAR = "BirthYear";
         const String FIELD_BIRTH_MONTH = "BirthMonth";
         const String FIELD_BIRTH_DAY = "BirthDay";
-        bool UpdateMode => new ExchangeDbService().GetUserProfile(from.Id.ToString()) != null;
-        public RegisterDialog(ChatId chatId, User from) : base(chatId, from)
-        {
+        bool UpdateMode => service.GetUserProfile(from.Id.ToString()) != null;
+        ExchangeDbService service;
 
+        public RegisterDialog(ExchangeDbService service, ChatId chatId, User from) : base(chatId, from)
+        {
+            this.service = service;
+
+        }
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<ExchangeDbService>();
         }
         public override string FirstField => FIELD_FIRST_NAME;
 
@@ -58,7 +66,7 @@ namespace TgBot.Exchange.TgDialogs
                         FieldType = FieldType.Choices,
                         Choices = new[] { new FormFieldChoiceItem(MisUserProfile.GenderType.Male.ToString(),"Male")
                             ,new FormFieldChoiceItem(MisUserProfile.GenderType.Female.ToString(),"Female")},
-                        NextField=d=>Task.FromResult(FIELD_BIRTH_YEAR)                        
+                        NextField = d => Task.FromResult(FIELD_BIRTH_YEAR)
                     };
 
                 case FIELD_BIRTH_YEAR:
@@ -67,7 +75,8 @@ namespace TgBot.Exchange.TgDialogs
                         Prompt = $"Enter year of birth.",
                         FieldType = FieldType.Text,
                         NextField = d => Task.FromResult(FIELD_BIRTH_MONTH),
-                        ParseFunction = (t,d,c) => {
+                        ParseFunction = (t, d, c) =>
+                        {
                             var res = new ParseResult();
                             int y;
                             if (int.TryParse(d, out y))
@@ -81,7 +90,7 @@ namespace TgBot.Exchange.TgDialogs
                             else
                                 res.Error = "Invalid year.";
                             return Task.FromResult(res);
-                            }
+                        }
                     };
 
                 case FIELD_BIRTH_MONTH:
@@ -94,22 +103,23 @@ namespace TgBot.Exchange.TgDialogs
                         FieldType = FieldType.Choices,
                         Choices = ch,
                         NextField = d => Task.FromResult(FIELD_BIRTH_DAY),
-                        ParseFunction = (t, d, c) =>Task.FromResult(new ParseResult { Data = int.Parse(d) })
+                        ParseFunction = (t, d, c) => Task.FromResult(new ParseResult { Data = int.Parse(d) })
                     };
                 case FIELD_BIRTH_DAY:
                     return new FormDialogField
                     {
                         Prompt = $"Enter day of birth.",
                         FieldType = FieldType.Text,
-                        ParseFunction = (t, d, c) => {
+                        ParseFunction = (t, d, c) =>
+                        {
                             var res = new ParseResult();
                             int day;
                             if (int.TryParse(d, out day))
                             {
                                 var y = (int)base.FieldData[FIELD_BIRTH_YEAR].Val();
                                 var m = (int)base.FieldData[FIELD_BIRTH_MONTH].Val();
-                                var maxDay=DateTime.DaysInMonth(y, m);
-                                if (day< 1&& day > maxDay)
+                                var maxDay = DateTime.DaysInMonth(y, m);
+                                if (day < 1 && day > maxDay)
                                     res.Error = "Invalid day.";
                                 else
                                     res.Data = day;
@@ -125,20 +135,19 @@ namespace TgBot.Exchange.TgDialogs
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new ExchangeDbService();
-            String firstName=(String)FieldData[FIELD_FIRST_NAME].Val();
-            String lastName= (String)FieldData[FIELD_LAST_NAME].Val();
-            
+            String firstName = (String)FieldData[FIELD_FIRST_NAME].Val();
+            String lastName = (String)FieldData[FIELD_LAST_NAME].Val();
+
             service.SetExchangeUserProfile(new Exchange.ExchangeUserProfile
             {
                 UserId = from.Id.ToString(),
                 FirstName = firstName,
-                LastName=lastName,
+                LastName = lastName,
                 ShortName = (String)FieldData[FIELD_SHORT_NAME].Val(),
-                DateOfBirth =new DateTime((int)FieldData[FIELD_BIRTH_YEAR].Val(),(int)FieldData[FIELD_BIRTH_MONTH].Val(),(int)FieldData[FIELD_BIRTH_DAY].Val()),
+                DateOfBirth = new DateTime((int)FieldData[FIELD_BIRTH_YEAR].Val(), (int)FieldData[FIELD_BIRTH_MONTH].Val(), (int)FieldData[FIELD_BIRTH_DAY].Val()),
                 Gender = Enum.Parse<ExchangeUserProfile.GenderType>((String)FieldData[FIELD_GENDER].Val())
-                });
-            await bot.SendTextMessageAsync(this.chatId, $"Profile saved",cancellationToken:cancellationToken);
+            });
+            await bot.SendTextMessageAsync(this.chatId, $"Profile saved", cancellationToken: cancellationToken);
             return DialogResult.Terminated;
         }
     }

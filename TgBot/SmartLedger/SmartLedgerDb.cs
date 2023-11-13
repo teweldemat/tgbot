@@ -4,6 +4,10 @@ namespace TgBot.SmartLedger
 {
     public class TgBotDb:DbContext
     {
+        public TgBotDb(DbContextOptions<TgBotDb> options) : base(options)
+        {
+
+        }
         public DbSet<CashEntity> CashEntities { get; set; }
         public DbSet<AuditRecord> AuditRecords { get; set; }
         public DbSet<MisDelta> DeltaRecords { get; set; }
@@ -13,6 +17,10 @@ namespace TgBot.SmartLedger
     }
     public class SmartLedgerDb : TgBotDb
     {
+        public SmartLedgerDb(DbContextOptions<TgBotDb> options) : base(options)
+        {
+
+        }
         public DbSet<CashAccount> CashAccounts { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<CashLedgerEntry> CashLedgerEntries { get; set; }
@@ -44,10 +52,6 @@ namespace TgBot.SmartLedger
         public DbSet<Tasks.TaskEntityConfiguration> TaskConfig { get; set; }
         public DbSet<Tasks.UserWorkState> WorkerStates { get; set; }
         public DbSet<Tasks.FlowReportVersion> FRVersions { get; set; }
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlServer(Program.GetConnectionString("TGBot"));
-        }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Tasks.TaskType>().HasData(new Tasks.TaskType { Id = 1, Name = "Technical",OrderN=1 });

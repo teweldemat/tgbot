@@ -518,5 +518,9 @@ namespace TgBot
         {
             return this.FieldData[FirstField].Val<List<ContentData>>();
         }
+
+        public override void SetServices(IServiceProvider services)
+        {
+        }
     }
 }

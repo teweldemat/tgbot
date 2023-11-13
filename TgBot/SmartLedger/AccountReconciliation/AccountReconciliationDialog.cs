@@ -1,31 +1,46 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger.AccountReconciliation
 {
     public class AccountReconciliationDialog : FormDialog
     {
-        
+
         const string FIELD_BALANCE = "Balance";
         const string FIELD_REMARK = "Remark";
         const string FIELD_ATTACHMENT_PREFIX = "Attachment";
         const string MORE_ATTACHMENT_PREFIX = "More Attachment";
-        
+
         public long Balance() => (long)FieldData[FIELD_BALANCE].Val();
         public String Remark() => (string)base.FieldData[FIELD_REMARK].Val();
         public Guid AccountId;
-        public AccountReconciliationDialog(ChatId chatId, User from,Guid accountId) : base(chatId, from)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+        public AccountReconciliationDialog(SmartLedgerService service,TgDbService tgService, ChatId chatId, User from, Guid accountId) : base(chatId, from)
         {
             this.AccountId = accountId;
+            this.service = service;
+            this.tgService = tgService;
+        }
+        public void SetServices(SmartLedgerService service, TgDbService tgService)
+        {
+            this.service = service;
+            this.tgService = tgService;
         }
         public override string FirstField => FIELD_BALANCE;
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
             var guid = service.CreateReconciliationFlow(
                from.Id.ToString(),
                this.Remark(),
@@ -52,19 +67,19 @@ namespace TgBot.SmartLedger.AccountReconciliation
             }
             try
             {
-                var tgService = new TgBot.TgDb.TgDbService();
                 var state = tgService.GetUserState(from.Id.ToString());
                 var account = service.GetCashAccount(this.AccountId);
 
-                await SmartLedgerBot.NotifyGroups(bot, $"{TGBot.FullName(from)} requested balance of account {account.Name} to be reset to {System.Web.HttpUtility.HtmlEncode(IntData.toString(this.Balance()))} Birr"
+                await SmartLedgerBot.NotifyGroups(bot,tgService, $"{TGBot.FullName(from)} requested balance of account {account.Name} to be reset to {System.Web.HttpUtility.HtmlEncode(IntData.toString(this.Balance()))} Birr"
                     + $"<pre>\n</pre> {SmartLedgerBot.ReconciliationLink(econciliation.Id, econciliation.Reference)}", true, cancellationToken);
-                var config = new SmartLedgerService().GetRuleData<SimplePaymentFlowConfiguration>();
-                if (config != null && config.Approver1 != null)
+                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+                var e = service.GetEntity();
+                if (e?.Owner!=null)
                 {
                     var user = new User();
-                    user.Id = long.Parse(config.Approver1);
+                    user.Id = long.Parse(e?.Owner);
                     user.FirstName = "Unknown";
-                    await TGBot.PushDialog(config.Checker1, new PaymentDetailDialog(config.Approver1, user, guid), cancellationToken);
+                    await TGBot.PushDialog(e?.Owner, new ReconciliationDetailDialog(service, e?.Owner, user, guid), cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -74,7 +89,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
             return DialogResult.Terminated;
         }
 
-        
+
 
         public override FormDialogField GetFieldDef(string key)
         {

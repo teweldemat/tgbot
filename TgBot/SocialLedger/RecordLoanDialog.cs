@@ -17,7 +17,9 @@ namespace TgBot.SocialLedger
         {
 
         }
-
+        public override void SetServices(IServiceProvider services)
+        {
+        }
         public override string FirstField => FIELD_FRIEND;
 
         public override FormDialogField GetFieldDef(string key)

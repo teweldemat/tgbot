@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
 {
@@ -13,16 +15,22 @@ namespace TgBot.SmartLedger
     {
         protected override int WorkType => PaymentWorkItem.WORK_TYPE_CANCELED;
 
-        protected override IEnumerable<string> NextStage=>null;
-        public CheckRejectDialog(ChatId chatId, User from, Guid paymentId) : base(chatId, from,paymentId)
+        protected override IEnumerable<string> NextStage => null;
+        SmartLedgerService service;
+
+        public CheckRejectDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(service, tgService,chatId, from, paymentId)
         {
             this.PaymentId = paymentId;
+            this.service = service;
         }
-        protected override string GroupNotification(string rejecterName,Payment payment)
+        protected override string GroupNotification(string rejecterName, Payment payment)
         {
-            return $"{rejecterName} checked and rejeced request {SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}";
+            return $"{rejecterName} checked and rejeced request {SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}";
         }
-
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<SmartLedgerService>();
+        }
         protected override string OwnerNotification(string rejecterName, Payment payment)
         {
             return $"{rejecterName} checked and rejected your request /{payment.Reference}";
@@ -34,9 +42,13 @@ namespace TgBot.SmartLedger
         protected const String FIELD_CONFIRM = "Confirm";
         public override string FirstField => FIELD_CONFIRM;
         public Guid PaymentId { get; set; }
-        public RejectDialogBase(ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public RejectDialogBase(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(chatId, from)
         {
             this.PaymentId = paymentId;
+            this.service = service;
+            this.tgService = tgService;
         }
         public override FormDialogField GetFieldDef(string key)
         {
@@ -66,7 +78,6 @@ namespace TgBot.SmartLedger
         protected abstract String OwnerNotification(String rejecterName, Payment payment);
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
 
             service.AddPaymentWorkItem(from.Id.ToString(),
                 new PaymentWorkItem
@@ -85,15 +96,14 @@ namespace TgBot.SmartLedger
             }
             try
             {
-                var tgService = new TgBot.TgDb.TgDbService();
                 var state = tgService.GetUserState(from.Id.ToString());
                 var prof = service.GetUserProfile(from.Id.ToString());
                 var payment = service.GetPayment(PaymentId);
 
                 //notify group
                 var groupNotif = this.GroupNotification(prof.FullName, payment);
-                if(groupNotif!=null)
-                    await SmartLedgerBot.NotifyGroups(bot, groupNotif, true, cancellationToken);
+                if (groupNotif != null)
+                    await SmartLedgerBot.NotifyGroups(bot,tgService, groupNotif, true, cancellationToken);
 
                 //notify owner
                 var ownerNotification = this.OwnerNotification(prof.FullName, payment);
@@ -112,7 +122,7 @@ namespace TgBot.SmartLedger
                         var user = new User();
                         user.Id = long.Parse(v);
                         user.FirstName = "Unknown";
-                        await TGBot.PushDialog(v, new PaymentDetailDialog(user.Id, user, PaymentId), cancellationToken);
+                        await TGBot.PushDialog(v, new PaymentDetailDialog(service,tgService, user.Id, user, PaymentId), cancellationToken);
                     }
                 }
             }
@@ -133,15 +143,22 @@ namespace TgBot.SmartLedger
         public List<Guid> CashAccounts { get; set; }
         public Payment payment { get; set; }
         public override string FirstField => FIELD_NOTE;
-
-        public CheckAcceptDialog(ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        SmartLedgerService service;
+        TgDbService tgService;
+        public override void SetServices(IServiceProvider services)
         {
-            var service = new SmartLedgerService();
+            this.service = services.GetService<SmartLedgerService>();
+            this.tgService = services.GetService<TgDbService>();
+        }
+        public CheckAcceptDialog(SmartLedgerService service, TgDbService tgService,ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        {
+            this.tgService = tgService;
+            this.service = service;
             this.payment = service.GetPayment(paymentId);
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             if (config == null)
                 throw new Exception("Configuration not set");
-            this.CashAccounts= service.GetCashAccounts().Select(x => x.Id).ToList();
+            this.CashAccounts = service.GetCashAccounts().Select(x => x.Id).ToList();
             if (this.CashAccounts.Count == 0)
                 throw new UserFriendlyError("Payment can't be checked because no cash account is set");
         }
@@ -168,7 +185,6 @@ namespace TgBot.SmartLedger
             if (key.StartsWith(FIELD_SOURCE_PREFIX))
             {
                 int index = int.Parse(key.Substring(FIELD_SOURCE_PREFIX.Length));
-                var service = new SmartLedgerService();
                 var ca = service.GetCashAccount(CashAccounts[index]);
                 var accounts = service.GetCashAccounts();
                 var used = this.FieldData.Where(kv => kv.Key.StartsWith(FIELD_SOURCE_PREFIX)).Select(kv => (Guid)kv.Value.Val()).ToList();
@@ -176,7 +192,7 @@ namespace TgBot.SmartLedger
                     used.Add(this.payment.TransferTo.Value);
                 return new FormDialogField
                 {
-                    Prompt = this.payment.IsDeposit? $"Enter the destination account to deposit to": $"Enter the source to pay from",
+                    Prompt = this.payment.IsDeposit ? $"Enter the destination account to deposit to" : $"Enter the source to pay from",
                     Choices = accounts.Where(x => !used.Contains(x.Id)).Select(x =>
                         new FormFieldChoiceItem(x.Id.ToString(), x.Name)).ToList(),
                     FieldType = FieldType.Choices,
@@ -190,7 +206,6 @@ namespace TgBot.SmartLedger
             if (key.StartsWith(FIELD_AMOUNT_PREFIX))
             {
                 int index = int.Parse(key.Substring(FIELD_AMOUNT_PREFIX.Length));
-                var service = new SmartLedgerService();
                 var cashAccount = (Guid)this.FieldData[FIELD_SOURCE_PREFIX + index].Val();
                 var ca = service.GetCashAccount(cashAccount);
                 if (ca == null)
@@ -198,7 +213,7 @@ namespace TgBot.SmartLedger
 
                 return new FormDialogField
                 {
-                    Prompt =this.payment.IsDeposit ? $"Enter the amount to add to {ca.Name}":  $"Enter the amount to pay from {ca.Name}",
+                    Prompt = this.payment.IsDeposit ? $"Enter the amount to add to {ca.Name}" : $"Enter the amount to pay from {ca.Name}",
                     FieldType = FieldType.Text,
                     NextField = index == this.CashAccounts.Count - 1
                     ? null : d =>
@@ -244,14 +259,13 @@ namespace TgBot.SmartLedger
             if (key.StartsWith(FIELD_PAYMENT_INST))
             {
                 int index = int.Parse(key.Substring(FIELD_PAYMENT_INST.Length));
-                var service = new SmartLedgerService();
                 var ca = service.GetCashAccount(CashAccounts[index]);
                 var accounts = service.GetCashAccounts();
                 var used = this.FieldData.Where(kv => kv.Key.StartsWith(FIELD_SOURCE_PREFIX)).Select(kv => (Guid)kv.Value.Val()).ToList();
                 String prompt;
                 if (payment.IsDeposit)
                     prompt = $"Enter deposit instructions";
-                else if(payment.IsTransferTransaction)
+                else if (payment.IsTransferTransaction)
                     prompt = $"Enter transfer instructions";
                 else
                     prompt = $"Enter payment instructions";
@@ -260,19 +274,19 @@ namespace TgBot.SmartLedger
                 {
                     Prompt = prompt,
                     FieldType = FieldType.Text,
-                    NextField = d => {
-                        long total = d.Sum(kv => kv.Key.StartsWith(FIELD_AMOUNT_PREFIX) ?(long)kv.Value.Val() : 0);
+                    NextField = d =>
+                    {
+                        long total = d.Sum(kv => kv.Key.StartsWith(FIELD_AMOUNT_PREFIX) ? (long)kv.Value.Val() : 0);
                         if (total >= payment.Amount)
                             return Task.FromResult<String>(null);
                         return Task.FromResult(FIELD_SOURCE_PREFIX + (index + 1));
-                        }
+                    }
                 };
             }
             return null;
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            var service = new SmartLedgerService();
             var sources = new List<PaymentSource>();
             if (CashAccounts.Count == 1)
             {
@@ -293,24 +307,24 @@ namespace TgBot.SmartLedger
                         sources.Add(new PaymentSource
                         {
                             CashAccountId = (Guid)kv.Value.Val(),
-                            Amount = this.payment.IsDeposit?-(long)this.FieldData[FIELD_AMOUNT_PREFIX + index].Val()
-                            :(long)this.FieldData[FIELD_AMOUNT_PREFIX + index].Val(),
-                            PaymentInstruction=(string)this.FieldData[FIELD_PAYMENT_INST+index].Val(),
+                            Amount = this.payment.IsDeposit ? -(long)this.FieldData[FIELD_AMOUNT_PREFIX + index].Val()
+                            : (long)this.FieldData[FIELD_AMOUNT_PREFIX + index].Val(),
+                            PaymentInstruction = (string)this.FieldData[FIELD_PAYMENT_INST + index].Val(),
                         }
                         );
                     }
                 }
             }
             service.AddPaymentWorkItem(
-                userId:from.Id.ToString(),
-                work:new PaymentWorkItem
+                userId: from.Id.ToString(),
+                work: new PaymentWorkItem
                 {
-                    PaymentId=this.payment.Id,
+                    PaymentId = this.payment.Id,
                     WorkType = PaymentWorkItem.WORK_TYPE_CHECK,
-                    Data=Newtonsoft.Json.JsonConvert.SerializeObject(sources),
+                    Data = Newtonsoft.Json.JsonConvert.SerializeObject(sources),
                     Note = (String)this.FieldData[FIELD_NOTE].Val()
                 },
-                setPaymentSources:sources
+                setPaymentSources: sources
                 );
             try
             {
@@ -322,28 +336,27 @@ namespace TgBot.SmartLedger
             }
             try
             {
-                var tgService = new TgBot.TgDb.TgDbService();
                 var state = tgService.GetUserState(from.Id.ToString());
                 var prof = service.GetUserProfile(from.Id.ToString());
-                
+
                 //notify group
-                await SmartLedgerBot.NotifyGroups(bot, $"{prof.FullName} checked and gave an ok to the request {SmartLedgerBot.PaymentLink(payment.Id,payment.Reference)}", true, cancellationToken);
+                await SmartLedgerBot.NotifyGroups(bot,tgService, $"{prof.FullName} checked and gave an ok to the request {SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}", true, cancellationToken);
 
                 //notify creator
                 await bot.SendTextMessageAsync(chatId: payment.Creator,
                         text: $"{prof.FullName} checked and gave an ok to your the request /{payment.Reference}",
                         parseMode: ParseMode.Html,
                         cancellationToken: cancellationToken);
-                
+
                 //notify next stage
-                var config = new SmartLedgerService().GetRuleData<SimplePaymentFlowConfiguration>();
-                if (config != null) 
+                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+                if (config != null)
                 {
                     var next = config.Approver1;
                     var user = new User();
                     user.Id = long.Parse(next);
                     user.FirstName = "Unknown";
-                    await TGBot.PushDialog(next, new PaymentDetailDialog(next, user, payment.Id), cancellationToken);
+                    await TGBot.PushDialog(next, new PaymentDetailDialog(service, tgService, next, user, payment.Id), cancellationToken);
                 }
             }
             catch (Exception ex)

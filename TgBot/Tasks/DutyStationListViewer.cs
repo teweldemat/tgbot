@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -10,7 +11,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TgBot.Tasks
 {
-    class DutyStationListViewer :BotDialogBase
+    class DutyStationListViewer : BotDialogBase
     {
         public ChatId chatId;
         public User user;
@@ -19,12 +20,18 @@ namespace TgBot.Tasks
         public DutyStationListViewer()
         {
         }
-        public DutyStationListViewer(ChatId chatId, User user)
+        TaskDbService service;
+        public DutyStationListViewer(TaskDbService service, ChatId chatId, User user)
         {
             this.chatId = chatId;
             this.user = user;
+            this.service = service;
         }
-        public static string FormatDutyStation(TaskDbService coreService, DutyStation dutyStation,String numLabel)
+        public override void SetServices(IServiceProvider services)
+        {
+            this.service = services.GetService<TaskDbService>();
+        }
+        public static string FormatDutyStation(TaskDbService coreService, DutyStation dutyStation, String numLabel)
         {
 
             var html = $"{numLabel} {dutyStation.Name} ({dutyStation.Address})";
@@ -32,14 +39,13 @@ namespace TgBot.Tasks
         }
         public String FormatDutyStationDetail(DutyStation dutyStation)
         {
-            var service = new TaskDbService();
-            var count=service.DutyStationWorkerCount(dutyStation.Id);
+            var count = service.DutyStationWorkerCount(dutyStation.Id);
             var ds = service.GetDutyStation(dutyStation.Id);
-            var html = 
+            var html =
 $@"Duty station name:{ds.Name}<pre>
 </pre>Code: {ds.Code}<pre>
 </pre>Address: {ds.Address})<pre>
-</pre>Team memebers assigned: {(count==0?"none":count.ToString())}";
+</pre>Team memebers assigned: {(count == 0 ? "none" : count.ToString())}";
             return html;
         }
         public override async Task<DialogResult> HandleCallBackAsync(ITelegramBotClient bot, CallbackQuery callBack, CancellationToken cancelationToken)
@@ -57,7 +63,7 @@ $@"Duty station name:{ds.Name}<pre>
                         return DialogResult.Handled;
                 }
             }*/
-            if("Delete".Equals(callBack.Data))
+            if ("Delete".Equals(callBack.Data))
             {
                 return DialogResult.Handled;
             }
@@ -65,8 +71,8 @@ $@"Duty station name:{ds.Name}<pre>
         }
         public override async Task<DialogResult> HandleMessageAsync(ITelegramBotClient bot, Message message, CancellationToken cancelationToken)
         {
-            
-            DutyStation ds=DutyStations.Where(x=>x.Code.ToLower().Equals(message.Text.ToLower())).FirstOrDefault();
+
+            DutyStation ds = DutyStations.Where(x => x.Code.ToLower().Equals(message.Text.ToLower())).FirstOrDefault();
             if (ds != null)
             {
                 this.SelectedDutyStation = ds;
@@ -77,14 +83,14 @@ $@"Duty station name:{ds.Name}<pre>
 
         private async Task DisplayDutyStationDetail(ITelegramBotClient bot)
         {
-            var e = new TaskDbService().GetEntity();
+            var e = service.GetEntity();
             if (e != null && e.Owner.Equals(user.Id.ToString()))
             {
 
                 await bot.SendTextMessageAsync(chatId,
                     text: FormatDutyStationDetail(this.SelectedDutyStation),
                     parseMode: ParseMode.Html,
-                    replyMarkup: FormDialog.CreateInlineButtons(new KeyValuePair<String,String>[] { 
+                    replyMarkup: FormDialog.CreateInlineButtons(new KeyValuePair<String, String>[] { 
                         //new KeyValuePair<String, String>("Delete", "Delete")
                         })
                     );
@@ -97,11 +103,10 @@ $@"Duty station name:{ds.Name}<pre>
             }
         }
 
-        async Task ShowPageAsync(ITelegramBotClient bot,int index, CancellationToken cancelationToken)
+        async Task ShowPageAsync(ITelegramBotClient bot, int index, CancellationToken cancelationToken)
         {
-            
-            var coreService = new TaskDbService();
-            DutyStations= coreService.GetAllDutyStations();
+
+            DutyStations = service.GetAllDutyStations();
             if (DutyStations.Count == 0)
             {
                 await bot.SendTextMessageAsync(chatId, "No duty station created");
@@ -112,7 +117,7 @@ $@"Duty station name:{ds.Name}<pre>
                 String listHtml = null;
                 foreach (var f in DutyStations)
                 {
-                    var html = FormatDutyStation(coreService, f, $"{f.Code}: ");
+                    var html = FormatDutyStation(service, f, $"{f.Code}: ");
                     listHtml = listHtml == null ? html : (listHtml + "<pre>\n</pre>" + html);
                     n++;
                 }
@@ -127,6 +132,6 @@ $@"Duty station name:{ds.Name}<pre>
         {
             await ShowPageAsync(bot, 0, cancelationToken);
             return DialogResult.Handled;
-        }        
+        }
     }
 }

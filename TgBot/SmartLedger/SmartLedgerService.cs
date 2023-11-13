@@ -8,38 +8,38 @@ using TgBot.SmartLedger.AccountReconciliation;
 
 namespace TgBot.SmartLedger
 {
-    public class TgBotService<T>: ServiceBase<T> where T:TgBotDb,new()
+    public class TgBotService<T>: ServiceBase<T> where T:TgBotDb
     {
-        protected delegate void AuditTransactNoReturnDelegate(SmartLedgerDb db, Guid aid);
-        protected delegate T AuditTransactionReturnDelegate<T>(SmartLedgerDb db, Guid aid);
+        protected delegate void AuditTransactNoReturnDelegate(T db, Guid aid);
+        protected delegate RetT AuditTransactionReturnDelegate<RetT>(T db, Guid aid);
         protected delegate void ProcessDeltaBeforeSaveDelegate(Object deltaData);
+        public TgBotService(T db):base(db)
+        {
+        }
         protected void AuditTransactNoReturn(String userId, String operation, object deltaData, long now, AuditTransactNoReturnDelegate f)
         {
             var aid = RecordAudit(userId, operation + "_attempt", deltaData, now, null, false);
-            using (var db = new SmartLedgerDb())
+
+            var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
+            try
             {
-                var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
-                try
-                {
-                    RecordAuditInternal(db, userId, operation, deltaData, now, aid);
-                    f(db, aid);
-                    db.SaveChanges();
-                    tran.Commit();
-                }
-                catch (Exception ex)
-                {
-                    tran.Rollback();
-                    RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
-                    throw;
-                }
+                RecordAuditInternal(db, userId, operation, deltaData, now, aid);
+                f(db, aid);
+                db.SaveChanges();
+                tran.Commit();
             }
+            catch (Exception ex)
+            {
+                tran.Rollback();
+                RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
+                throw;
+            }
+
         }
 
         protected T AuditTransactReturn<T>(String userId, String operation, object data, long now, AuditTransactionReturnDelegate<T> f)
         {
             var aid = RecordAudit(userId, operation + "_attempt", data, now, null, false);
-            using (var db = new SmartLedgerDb())
-            {
                 var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
                 try
                 {
@@ -55,7 +55,7 @@ namespace TgBot.SmartLedger
                     RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
                     throw;
                 }
-            }
+            
         }
         Guid RecordAuditInternal(TgBotDb db, String userId, String operation, Object deltaData, long now, Guid? parent)
         {
@@ -136,7 +136,38 @@ namespace TgBot.SmartLedger
         {
             return db.CashEntities.AsNoTracking().FirstOrDefault();
         }
-        public Guid CreateEntity(String userId, String name, String ruleType, String ruleData)
+        public virtual Guid CreateEntity(String userId, String name, String ruleType, String ruleData)
+        {
+            var now = TGBot.Now();
+            return AuditTransactReturn<Guid>(
+                userId, "CreateEntity", new { name, ruleType, ruleData }, now,
+                (db, aid) =>
+                {
+
+                    if (string.IsNullOrEmpty(name))
+                        throw new UserFriendlyError("Name must provided");
+                    var entity = new CashEntity
+                    {
+                        Id = Guid.NewGuid(),
+                        Owner = userId,
+                        AuditId = aid,
+                        TransactionHead = null,
+                        Name = name
+                    };
+                    db.CashEntities.Add(entity);
+                    db.SaveChanges();
+                    return entity.Id;
+                });
+        }
+
+    }
+    public class SmartLedgerService : TgBotService<SmartLedgerDb>
+    {
+        public SmartLedgerService(SmartLedgerDb db):base(db)
+        {
+
+        }
+        public override Guid CreateEntity(String userId, String name, String ruleType, String ruleData)
         {
             var now = TGBot.Now();
             return AuditTransactReturn<Guid>(
@@ -167,14 +198,10 @@ namespace TgBot.SmartLedger
                     return entity.Id;
                 });
         }
-
-    }
-    public class SmartLedgerService : TgBotService<SmartLedgerDb>
-    {
         internal Guid AddCashAccount(string userId, CashAccount cashAccount, Func<Guid, PaymentFlowRule> UpdateConfig)
         {
             var now = TGBot.Now();
-            return AuditTransactReturn(
+            return AuditTransactReturn<Guid>(
                 userId, "AddCashAccount", cashAccount, now,
                 (db, aid) =>
                 {
@@ -303,7 +330,7 @@ namespace TgBot.SmartLedger
             Guid? restartPayment)
         {
             var now = TGBot.Now();
-            return AuditTransactReturn(
+            return AuditTransactReturn<Guid>(
                 userId, "CreatePaymentFlow", new { note, amount }, now,
                 (db, aid) =>
                 {
@@ -424,7 +451,7 @@ namespace TgBot.SmartLedger
 
                     string prefix = WorkFlowState.GEN_REF_PREFIX;
 
-                    foreach (var pr in db.Payments)
+                    foreach (var pr in db.Reconciliations)
                     {
                         if (pr.Reference.StartsWith(prefix))
                         {

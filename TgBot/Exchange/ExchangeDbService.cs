@@ -2,14 +2,21 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using TgBot.SmartLedger;
+using TgBot.TgDb;
 
 namespace TgBot.Exchange
 {
-    public class ExchangeDbService : ServiceBase<ExchangeDb>
+    public class ExchangeDbService : TgBotService<ExchangeDb>
     {
         public const double MIN_OFFER_PRICE = 0.01;
         public const double MAX_OFFER_PRICE = 1e9;
         public const string OBJECT_TYPE_PREFIX = "Object_";
+
+        public ExchangeDbService(ExchangeDb db) : base(db)
+        {
+        }
+
         protected delegate void ExchangeTransactNoReturnDelegate(ExchangeDb db, ExchangeTransaction tran);
         protected delegate T ExchangeTransactionReturnDelegate<T>(ExchangeDb db, ExchangeTransaction tran);
         private static ExchangeTransaction SaveExchangeTransaction(ExchangeDb db, string userId, string TranType, object Data)
@@ -65,7 +72,7 @@ namespace TgBot.Exchange
         ExchangeUserProfile GetUserProfile(ExchangeDb db, String userId)
             => db.UserProfiles.Where(x => x.UserId == userId).FirstOrDefault();
         public ExchangeUserProfile GetUserProfile(String userId)
-            => DbRead(db => db.UserProfiles.Where(x => x.UserId == userId).FirstOrDefault());
+            => db.UserProfiles.Where(x => x.UserId == userId).FirstOrDefault();
 
         TrusteeInformation GetTrusteeInformation(ExchangeDb db, String userId)
         {

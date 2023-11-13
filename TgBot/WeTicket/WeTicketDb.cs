@@ -7,6 +7,11 @@ namespace TgBot.WeTicket
     public class WeTicketDb:DbContext
     {
 
+        public WeTicketDb(DbContextOptions<WeTicketDb> options) : base(options)
+        {
+
+        }
+
         //Core
         public DbSet<FundAgent> Agents { get; set; }
         public DbSet<FundAgentId> AgentIds { get; set; }
@@ -26,10 +31,6 @@ namespace TgBot.WeTicket
         {
             modelBuilder.Entity<FundRaisingChannel>().HasData(new FundRaisingChannel { Id = FundRaisingChannel.CHANNEL_TELEGRAM, Description="Telegram" });
             modelBuilder.Entity<WithDrawalBank>().HasData(new WithDrawalBank{ Id = WithDrawalBank.BANK_CBE, Name = "Commercial Bank of Ethiopia",Order=1 });
-        }
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlServer(Program.GetConnectionString("TGBot"));
         }
 
     }

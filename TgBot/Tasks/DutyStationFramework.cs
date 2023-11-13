@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
+using TgBot.TgDb;
 
 namespace TgBot.Tasks
 {
@@ -23,8 +24,8 @@ namespace TgBot.Tasks
     }
     public interface IDutyStationSechdule
     {
-        DutyStationMode GetMode(String userId, long time);
-        DutyTimeSpan GetOnCurrentOnDutySpan(String userId, long time);
+        DutyStationMode GetMode(TaskDbService service, String userId, long time);
+        DutyTimeSpan GetOnCurrentOnDutySpan(TaskDbService service, String userId, long time);
     }
     public class DutyTimeSpan
     {
@@ -97,9 +98,9 @@ namespace TgBot.Tasks
                 });
             return ret;
         }
-        public DutyStationMode GetMode(String userId,long time)
+        public DutyStationMode GetMode(TaskDbService service, String userId,long time)
         {
-            var sh = GetOnCurrentOnDutySpan(userId,time);
+            var sh = GetOnCurrentOnDutySpan(service, userId,time);
             if (sh == null)
                 return DutyStationMode.Off;
             if (sh.Remote)
@@ -107,9 +108,8 @@ namespace TgBot.Tasks
             return DutyStationMode.OnSite;
         }
 
-        public DutyTimeSpan GetOnCurrentOnDutySpan(String userId,long time)
+        public DutyTimeSpan GetOnCurrentOnDutySpan(TaskDbService service, String userId,long time)
         {
-            var service = new TaskDbService();
             var holiday=service.GetHoliday(time);
             if (holiday!=null)
                 return null;
