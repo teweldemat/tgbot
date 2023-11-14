@@ -9,6 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger;
+using TgBot.SmartLedger.Dialog;
 using TgBot.TgDb;
 
 namespace TgBot.Exchange
@@ -47,7 +48,7 @@ namespace TgBot.Exchange
                     await bot.SendTextMessageAsync(
                     chatId: chatId,
                     text: "Welcome");
-                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<ExchangeDb>(service, chatId, from), cancellationToken);
+                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<ExchangeDb,ExchangeDbService>(service, chatId, from), cancellationToken);
                     return true;
                 }
 

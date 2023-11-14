@@ -9,6 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger;
+using TgBot.SmartLedger.Dialog;
 using TgBot.TgDb;
 
 namespace TgBot.Tasks
@@ -61,7 +62,7 @@ namespace TgBot.Tasks
                     await bot.SendTextMessageAsync(
                     chatId: chatId,
                     text: "Welcome");
-                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb, SmartLedgerService>(service, chatId, from), cancellationToken);
                     return true;
                 }
                 var entity = service.GetEntity();
@@ -379,7 +380,7 @@ namespace TgBot.Tasks
                             await TGBot.PushDialog(from.Id.ToString(), new AddDutyStationDialog(service, tgService,chatId, from), cancellationToken);
                             return DialogResult.Terminated;
                         case MI_SET_USER_PROFILE:
-                            await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                            await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb, SmartLedgerService>(service, chatId, from), cancellationToken);
                             return DialogResult.Terminated;
                         case MI_SETUP_FLOW:
                             await TGBot.PushDialog(from.Id.ToString(), new SetTaskFlowDialog(service,tgService, chatId, from), cancellationToken);
@@ -486,7 +487,7 @@ namespace TgBot.Tasks
                                 }
                                 if (MI_SET_USER_PROFILE.Equals(msg.Text))
                                 {
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, msg.Chat.Id, msg.From), cancellationToken);
+                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb, SmartLedgerService>(service, msg.Chat.Id, msg.From), cancellationToken);
                                     return true;
                                 }
 
@@ -571,26 +572,26 @@ namespace TgBot.Tasks
                 var content = service.GetTaskContents(taskId);
                 var statusString = TaskFullData.StatusString(p);
                 var text = $"<strong>Code</strong> {p.Code}";
-                text += $"<pre>\n</pre><strong>Title</strong> {p.Title}";
-                text += $"<pre>\n</pre><strong>Status:</strong> {statusString}";
+                text += $"\n<strong>Title</strong> {p.Title}";
+                text += $"\n<strong>Status:</strong> {statusString}";
                 if (p.PlannedEndTime != null)
-                    text += $"<pre>\n</pre><strong>Due time:</strong> {TGBot.ToRelativeTime(p.PlannedEndTime.Value)}";
+                    text += $"\n<strong>Due time:</strong> {TGBot.ToRelativeTime(p.PlannedEndTime.Value)}";
                 if (!String.IsNullOrEmpty(p.Description))
-                    text += $"<pre>\n</pre><strong>Description:</strong>{p.Description}";
-                text += $"<pre>\n</pre><strong>Created by:</strong> {service.GetUserProfile(p.CreatedBy).FullName}";
+                    text += $"\n<strong>Description:</strong>{p.Description}";
+                text += $"\n<strong>Created by:</strong> {service.GetUserProfile(p.CreatedBy).FullName}";
                 if (p.ParentTaskId != null)
                 {
                     var parent = service.GetTask(p.ParentTaskId.Value);
-                    text += $"<pre>\n</pre><strong>Subtask of:</strong> {parent.Title} /{parent.Code}";
+                    text += $"\n<strong>Subtask of:</strong> {parent.Title} /{parent.Code}";
                 }
                 if (checkList.Count > 0)
                 {
-                    text += "<pre>\n</pre><strong>Check List</strong>";
+                    text += "\n<strong>Check List</strong>";
                     int n = 1;
                     foreach (var c in checkList)
                     {
 
-                        text += $"<pre>\n</pre>";
+                        text += $"\n";
                         if (options.includeChkCommands)
                             text += $"<pre> </pre>/chk{n++}";
                         text += $"<pre> </pre>{(c.DoneTime == null ? "_" : "X")} : {c.Name}";
@@ -599,11 +600,11 @@ namespace TgBot.Tasks
                 }
                 if (content.Count > 0)
                 {
-                    text += "<pre>\n</pre><strong>Attachments</strong>";
+                    text += "\n<strong>Attachments</strong>";
                     int n = 1;
                     foreach (var c in content)
                     {
-                        text += $"<pre>\n</pre>";
+                        text += $"\n";
                         if (options.includeAttCommands)
                             text += $"<pre> </pre>/att{n}";
                         if (c.LinkType != FormDialog.ContentLinkType.Url)
@@ -617,10 +618,10 @@ namespace TgBot.Tasks
                 var subtasks = service.GetSubTasks(taskId);
                 if (subtasks.Count > 0)
                 {
-                    text += "<pre>\n</pre><strong>Subtasks</strong>";
+                    text += "\n<strong>Subtasks</strong>";
                     foreach (var c in subtasks)
                     {
-                        text += $"<pre>\n</pre>/{c.Code} {c.Title} ({TaskFullData.StatusString(c)})";
+                        text += $"\n/{c.Code} {c.Title} ({TaskFullData.StatusString(c)})";
                     }
                 }
                 int commentCount = service.GetTaskCommentCount(taskId);
@@ -628,26 +629,26 @@ namespace TgBot.Tasks
                 {
                     var comment = service.GetLastComment(taskId);
                     var commenter = service.GetUserProfile(comment.UserId);
-                    text += $"<pre>\n</pre>Comment by {commenter.Name()} ({TGBot.ToRelativeTime(comment.Time)})";
-                    text += $"<pre>\n</pre><i>{comment.Comment}</i>";
+                    text += $"\nComment by {commenter.Name()} ({TGBot.ToRelativeTime(comment.Time)})";
+                    text += $"\n<i>{comment.Comment}</i>";
                     if (commentCount > 2)
-                        text += $"<pre>\n</pre>{commentCount - 1} other comments not shown";
+                        text += $"\n{commentCount - 1} other comments not shown";
                     else if (commentCount == 2)
-                        text += $"<pre>\n</pre>One other comment not shown";
+                        text += $"\nOne other comment not shown";
                 }
 
                 var workers = service.GetTaskUsers(taskId, TaskUserRole.Worker);
                 if (workers.Count == 0)
-                    text += "<pre>\n</pre>No one is assigned to this task";
+                    text += "\nNo one is assigned to this task";
                 else
                 {
-                    text += "<pre>\n</pre><strong>Working on it:</strong>";
+                    text += "\n<strong>Working on it:</strong>";
                     text += workers[0].FullName;
                     for (int i = 1; i < workers.Count; i++)
                         text += ", " + workers[i].FullName;
                 }
                 if (options.includeDetailLink)
-                    text += $"<pre>\n</pre> <a href=\"{WebLinkBaseUrl}/task/?id={taskId}\">Details</a>";
+                    text += $"\n <a href=\"{WebLinkBaseUrl}/task/?id={taskId}\">Details</a>";
                 return text;
             }
         }

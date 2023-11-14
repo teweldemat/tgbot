@@ -65,10 +65,10 @@ namespace TgBot.SmartLedger
                 foreach (var f in payments)
                 {
                     var html = FormatPayment(service, f, $"{index + n}. ");
-                    listHtml = listHtml == null ? html : (listHtml + "<pre>\n\n</pre>" + html);
+                    listHtml = listHtml == null ? html : (listHtml + "\n" + html);
                     n++;
                 }
-                listHtml += $"<pre>\n\n</pre><a href=\"{SmartLedgerBot.WebLinkBaseUrl}/sl/summary\">[Full Summary]</a>";
+                listHtml += $"\n<a href=\"{SmartLedgerBot.WebLinkBaseUrl}/sl/summary\">[Full Summary]</a>";
                 if (index > 0)
                 {
                     await bot.EditMessageReplyMarkupAsync(chatId, this.buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));

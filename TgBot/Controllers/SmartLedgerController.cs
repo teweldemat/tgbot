@@ -286,6 +286,7 @@ namespace TgBot.Controllers
                 public String Balance { get; set; }
                 public String Remark { get; set; }
                 public String PrLink { get; set; }
+                public TransactionReverseRole ReverseRole { get; set; }
             }
             public String BeginningBalance { get; set; }
             public String AccountName { get; set; }
@@ -323,7 +324,9 @@ namespace TgBot.Controllers
                         DebitAmount = IntData.toString(debit, ""),
                         CreditAmount = IntData.toString(credit, ""),
                         Remark = w.entry.Remark,
+                        ReverseRole=w.transaction.ReverseRole,
                         PrLink = w.transaction.Payment == null ? null : $"{SmartLedgerBot.WebLinkBaseUrl}/sl/payment?id={w.transaction.Payment}"
+                       
                     }); ;
                     totalDebit += debit;
                     totalCredit += credit;

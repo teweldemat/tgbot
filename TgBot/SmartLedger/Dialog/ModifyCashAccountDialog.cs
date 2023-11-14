@@ -9,7 +9,7 @@ using Telegram.Bot.Types;
 using TgBot.SmartLedger.AccountReconciliation;
 using TgBot.TgDb;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
     public class ModifyCashAccountDialog : FormDialog
     {
@@ -24,97 +24,25 @@ namespace TgBot.SmartLedger
         const string FIELD_TYPE = "Type";
         const string FIELD_DATA = "String";
         public Guid CashAccountId { get; set; }
-        public override string FirstField => FIELD_TYPE;
         SmartLedgerService service;
         TgDbService tgService;
-
         public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<SmartLedgerService>();
-            this.tgService = services.GetService<TgDbService>();
+            service = services.GetServiceAssert<SmartLedgerService>();
+            tgService = services.GetServiceAssert<TgDbService>();
+
         }
         public ModifyCashAccountDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid cahsAccountId)
             : base(chatId, from)
         {
-            this.CashAccountId = cahsAccountId;
+            CashAccountId = cahsAccountId;
             this.service = service;
             this.tgService = tgService;
         }
-        protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
-        {
-            var account = service.GetCashAccount(this.CashAccountId);
-            var oldConfig = service.GetRuleData<SimplePaymentFlowConfiguration>();
-            var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
-            if (config == null)
-                throw new UserFriendlyError("Existing configuration not found");
-
-            bool accountUpdated = false;
-            bool configUpdated = false;
-            try
-            {
-                MisUserProfile notifyPayer = null;
-                String oldPayer = null;
-                bool deposit = false;
-                switch ((ModifyType)FieldData[FIELD_TYPE].Val())
-                {
-                    case ModifyType.SetPayer:
-                        configUpdated = true;
-                        var payer = (string)FieldData[FIELD_DATA].Val();
-                        config.SetPayer(this.CashAccountId, false, payer);
-                        notifyPayer = service.GetUserProfile(payer);
-                        oldPayer = oldConfig.GetPayer(this.CashAccountId, false);
-                        break;
-                    case ModifyType.SetDepositor:
-                        configUpdated = true;
-                        var depositor = (string)FieldData[FIELD_DATA].Val();
-                        config.SetPayer(this.CashAccountId, true, depositor);
-                        notifyPayer = service.GetUserProfile(depositor);
-                        oldPayer = oldConfig.GetPayer(this.CashAccountId, true);
-                        deposit = true;
-                        break;
-                    case ModifyType.SetName:
-                        accountUpdated = true;
-                        account.Name = (string)FieldData[FIELD_DATA].Val();
-                        break;
-                    case ModifyType.ChangeType:
-                        accountUpdated = true;
-                        account.Code = account.Code == null ? (string)FieldData[FIELD_DATA].Val() : null;
-                        break;
-                    case ModifyType.ReconcileAccount:
-                        await TGBot.PushDialog(from.Id.ToString(), new AccountReconciliationDialog(service, tgService, chatId, from, this.CashAccountId), cancellationToken);
-                        break;
-                    default:
-                        break;
-                }
-                if (accountUpdated)
-                    service.UpdateAccount(from.Id.ToString(), account, null, configUpdated ? Newtonsoft.Json.JsonConvert.ToString(config) : null);
-                else if (configUpdated)
-                {
-                    service.SetRule(from.Id.ToString(), null, Newtonsoft.Json.JsonConvert.SerializeObject(config));
-                    try
-                    {
-                        if (notifyPayer != null)
-                            await SetupFlowDialog.NotifyPayerAssignment(bot,service,tgService, notifyPayer.UserId,
-                                oldPayer == null ? null : service.GetUserProfile(oldPayer).FullName, deposit, this.CashAccountId, cancellationToken);
-
-                    }
-                    catch (Exception ex)
-                    {
-                        Program.LogException("Error notifying groups and users", ex);
-                    }
-                }
-                return DialogResult.Terminated;
-            }
-            catch (Exception ex)
-            {
-                TGBot.LogException("Error trying to add account", ex);
-                await bot.SendTextMessageAsync(chatId, "The account couldn't be added becaues of internal error. Try again latter");
-                return DialogResult.Terminated;
-            }
-        }
+        public override string FirstField => FIELD_TYPE;
         public override FormDialogField GetFieldDef(string key)
         {
-            var account = service.GetCashAccount(this.CashAccountId);
+            var account = service.GetCashAccount(CashAccountId);
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             if (config == null)
                 throw new UserFriendlyError("Existing configuration not found");
@@ -135,13 +63,13 @@ namespace TgBot.SmartLedger
                         NextField = d =>
                         {
                             if ((ModifyType)d[FIELD_TYPE].Val() == ModifyType.ChangeType && account.Code != null)
-                                return Task.FromResult<String>(null);
+                                return Task.FromResult<string>(null);
                             return Task.FromResult(FIELD_DATA);
                         },
                         ParseFunction = (b, t, c) => Task.FromResult(new ParseResult { Data = Enum.Parse<ModifyType>(t) }),
                     };
                 case FIELD_DATA:
-                    String prompt;
+                    string prompt;
                     FieldType fieldType;
                     IList<FormFieldChoiceItem> choices = null;
                     switch ((ModifyType)FieldData[FIELD_TYPE].Val())
@@ -150,14 +78,14 @@ namespace TgBot.SmartLedger
                             prompt = "Select new payer:";
                             fieldType = FieldType.Choices;
                             choices = service.GetAllUserProfiles()
-                                .Where(x => !config.IsPayer(x.UserId, this.CashAccountId, false))
+                                .Where(x => !config.IsPayer(x.UserId, CashAccountId, false))
                                 .Select(x => new FormFieldChoiceItem(x.UserId, x.FullName)).ToList();
                             break;
                         case ModifyType.SetDepositor:
                             prompt = "Select new depositor:";
                             fieldType = FieldType.Choices;
                             choices = service.GetAllUserProfiles()
-                                .Where(x => !config.IsPayer(x.UserId, this.CashAccountId, true))
+                                .Where(x => !config.IsPayer(x.UserId, CashAccountId, true))
                                 .Select(x => new FormFieldChoiceItem(x.UserId, x.FullName)).ToList();
                             break;
                         case ModifyType.SetName:
@@ -185,5 +113,78 @@ namespace TgBot.SmartLedger
             }
             return null;
         }
+        protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
+        {
+            var account = service.GetCashAccount(CashAccountId);
+            var oldConfig = service.GetRuleData<SimplePaymentFlowConfiguration>();
+            var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+            if (config == null)
+                throw new UserFriendlyError("Existing configuration not found");
+
+            bool accountUpdated = false;
+            bool configUpdated = false;
+            try
+            {
+                MisUserProfile notifyPayer = null;
+                string oldPayer = null;
+                bool deposit = false;
+                switch ((ModifyType)FieldData[FIELD_TYPE].Val())
+                {
+                    case ModifyType.SetPayer:
+                        configUpdated = true;
+                        var payer = (string)FieldData[FIELD_DATA].Val();
+                        config.SetPayer(CashAccountId, false, payer);
+                        notifyPayer = service.GetUserProfile(payer);
+                        oldPayer = oldConfig.GetPayer(CashAccountId, false);
+                        break;
+                    case ModifyType.SetDepositor:
+                        configUpdated = true;
+                        var depositor = (string)FieldData[FIELD_DATA].Val();
+                        config.SetPayer(CashAccountId, true, depositor);
+                        notifyPayer = service.GetUserProfile(depositor);
+                        oldPayer = oldConfig.GetPayer(CashAccountId, true);
+                        deposit = true;
+                        break;
+                    case ModifyType.SetName:
+                        accountUpdated = true;
+                        account.Name = (string)FieldData[FIELD_DATA].Val();
+                        break;
+                    case ModifyType.ChangeType:
+                        accountUpdated = true;
+                        account.Code = account.Code == null ? (string)FieldData[FIELD_DATA].Val() : null;
+                        break;
+                    case ModifyType.ReconcileAccount:
+                        await TGBot.PushDialog(from.Id.ToString(), new AccountReconciliationDialog(service, tgService, chatId, from, CashAccountId), cancellationToken);
+                        break;
+                    default:
+                        break;
+                }
+                if (accountUpdated)
+                    service.UpdateAccount(from.Id.ToString(), account, null, configUpdated ? Newtonsoft.Json.JsonConvert.ToString(config) : null);
+                else if (configUpdated)
+                {
+                    service.SetRule(from.Id.ToString(), null, Newtonsoft.Json.JsonConvert.SerializeObject(config));
+                    try
+                    {
+                        if (notifyPayer != null)
+                            await SetupFlowDialog.NotifyPayerAssignment(bot, service, tgService, notifyPayer.UserId,
+                                oldPayer == null ? null : service.GetUserProfile(oldPayer).FullName, deposit, CashAccountId, cancellationToken);
+
+                    }
+                    catch (Exception ex)
+                    {
+                        Program.LogException("Error notifying groups and users", ex);
+                    }
+                }
+                return DialogResult.Terminated;
+            }
+            catch (Exception ex)
+            {
+                TGBot.LogException("Error trying to add account", ex);
+                await bot.SendTextMessageAsync(chatId, "The account couldn't be added becaues of internal error. Try again latter");
+                return DialogResult.Terminated;
+            }
+        }
+
     }
 }

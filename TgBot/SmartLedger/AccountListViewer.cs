@@ -9,6 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger.AccountReconciliation;
+using TgBot.SmartLedger.Dialog;
 using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
@@ -33,11 +34,13 @@ namespace TgBot.SmartLedger
         {
             this.service = services.GetService<SmartLedgerService>();
             this.tgService = services.GetService<TgDbService>();
+            if(this.ModifyDialog!=null)
+                this.ModifyDialog.SetServices(services);    
         }
         public static string FormatAccount(SmartLedgerService coreService, CashAccount account, String numLabel)
         {
 
-            var html = $"{numLabel} {account.Name} {IntData.toString(account.Balance)} Birr";
+            var html = $"/{numLabel} <strong>{account.Name}</strong> {IntData.toString(account.Balance)} Birr";
             return html;
         }
         public String FormatAccountDetail(CashAccount account)
@@ -72,12 +75,12 @@ namespace TgBot.SmartLedger
 
             var ac = service.GetCashAccount(account.Id);
             var html = $"<strong>Account Name:</strong> {ac.Name}"
-                    + $"<pre>\n</pre><strong>Account Type:</strong> {(String.IsNullOrEmpty(ac.Code) ? "Cash on Hand" : "Bank")}"
-                    + $"<pre>\n</pre><strong>Balance:</strong> {IntData.toString(ac.Balance)}"
-                    + $"<pre>\n</pre><strong>Payer:</strong> {payer}"
-                    + $"<pre>\n</pre><strong>Depositor:</strong> {depositor}"
-                    + (account.Code == null ? "" : $"<pre>\n</pre><strong>Account #:</strong> {account.Code}")
-                    + $"<pre>\n</pre><a href=\"{SmartLedgerBot.GetLedgerLink(ac.Id)}\">Ledger</a>"
+                    + $"\n<strong>Account Type:</strong> {(String.IsNullOrEmpty(ac.Code) ? "Cash on Hand" : "Bank")}"
+                    + $"\n<strong>Balance:</strong> {IntData.toString(ac.Balance)}"
+                    + $"\n<strong>Payer:</strong> {payer}"
+                    + $"\n<strong>Depositor:</strong> {depositor}"
+                    + (account.Code == null ? "" : $"\n<strong>Account #:</strong> <u>{account.Code}</u>")
+                    + $"\n<a href=\"{SmartLedgerBot.GetLedgerLink(ac.Id)}\">Ledger</a>"
                     ;
             return html;
         }
@@ -124,7 +127,8 @@ namespace TgBot.SmartLedger
                 }
             }
             int n;
-            if (int.TryParse(message.Text.Trim(), out n))
+            
+            if (int.TryParse(message.Text.Trim().TrimStart('/'), out n))
             {
                 if (n >= 1 && n <= Accounts.Count)
                 {
@@ -172,10 +176,10 @@ namespace TgBot.SmartLedger
                 foreach (var f in Accounts)
                 {
                     var html = FormatAccount(service, f, $"{index + n}. ");
-                    listHtml = listHtml == null ? html : (listHtml + "<pre>\n</pre>" + html);
+                    listHtml = listHtml == null ? html : (listHtml + "\n" + html);
                     n++;
                 }
-                listHtml += "<pre>\n</pre>Enter a numer to see details";
+                listHtml += "\nEnter a numer to see details";
                 await bot.SendTextMessageAsync(chatId,
                     text: listHtml,
                     parseMode: ParseMode.Html);

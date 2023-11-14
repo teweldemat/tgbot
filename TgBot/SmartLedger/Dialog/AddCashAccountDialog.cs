@@ -7,35 +7,46 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TgBot.TgDb;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
-    public class AddCashAccountDialog: FormDialog
-    {        
-        const String FIELD_ACOUNT_NAME = "AccountName";
-        const String FIELD_ACOUNT_HAS_CODE = "HasCode";
-        const String FIELD_ACOUNT_BANK_ACCOUNT_CODE = "AccountCode";
-        const String FIELD_ACOUNT_BALANCE = "AccountBalance";
-        const String FIELD_ACOUNT_PAYER = "AccountPayer";
-        const String FIELD_ACOUNT_DEPOSITOR = "AccountDepositor";
+    public class AddCashAccountDialog : FormDialog
+    {
+        const string FIELD_ACOUNT_NAME = "AccountName";
+        const string FIELD_ACOUNT_HAS_CODE = "HasCode";
+        const string FIELD_ACOUNT_BANK_ACCOUNT_CODE = "AccountCode";
+        const string FIELD_ACOUNT_BALANCE = "AccountBalance";
+        const string FIELD_ACOUNT_PAYER = "AccountPayer";
+        const string FIELD_ACOUNT_DEPOSITOR = "AccountDepositor";
 
         SmartLedgerService service;
         TgDbService tgService;
-        public override string FirstField => FIELD_ACOUNT_NAME;
 
+        public AddCashAccountDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from) : base(chatId, from)
+        {
+            this.service = service;
+            this.tgService = tgService;
+        }
+        public override void SetServices(IServiceProvider services)
+        {
+            service = services.GetService<SmartLedgerService>();
+            tgService = services.GetService<TgDbService>();
+        }
+
+        public override string FirstField => FIELD_ACOUNT_NAME;
         public override FormDialogField GetFieldDef(string key)
         {
-            switch(key)
+            switch (key)
             {
                 case FIELD_ACOUNT_NAME:
                     return new FormDialogField
                     {
                         Prompt = "Enter the name of the account",
                         FieldType = FieldType.Text,
-                        NextField =d=> Task.FromResult(FIELD_ACOUNT_HAS_CODE),
-                        ParseFunction=(bot,t,c)=>
+                        NextField = d => Task.FromResult(FIELD_ACOUNT_HAS_CODE),
+                        ParseFunction = (bot, t, c) =>
                         {
-                            if (String.IsNullOrWhiteSpace(t))
-                                return Task.FromResult( new ParseResult { Error = "Enter valid name" });
+                            if (string.IsNullOrWhiteSpace(t))
+                                return Task.FromResult(new ParseResult { Error = "Enter valid name" });
                             return Task.FromResult(new ParseResult { Data = t });
                         }
                     };
@@ -44,8 +55,8 @@ namespace TgBot.SmartLedger
                     {
                         Prompt = "What type of account is this?",
                         FieldType = FieldType.Choices,
-                        NextField = d => Task.FromResult("BANK".Equals(d[FIELD_ACOUNT_HAS_CODE].Val())? FIELD_ACOUNT_BANK_ACCOUNT_CODE: FIELD_ACOUNT_BALANCE),
-                        Choices=new[] {new FormFieldChoiceItem("BANK"),new ("Cash On Hand")}
+                        NextField = d => Task.FromResult("BANK".Equals(d[FIELD_ACOUNT_HAS_CODE].Val()) ? FIELD_ACOUNT_BANK_ACCOUNT_CODE : FIELD_ACOUNT_BALANCE),
+                        Choices = new[] { new FormFieldChoiceItem("BANK"), new("Cash On Hand") }
                     };
                 case FIELD_ACOUNT_BANK_ACCOUNT_CODE:
                     return new FormDialogField
@@ -55,7 +66,7 @@ namespace TgBot.SmartLedger
                         NextField = d => Task.FromResult(FIELD_ACOUNT_BALANCE),
                         ParseFunction = (bot, t, c) =>
                         {
-                            if (String.IsNullOrWhiteSpace(t))
+                            if (string.IsNullOrWhiteSpace(t))
                                 return Task.FromResult(new ParseResult { Error = "Enter valid account code" });
                             return Task.FromResult(new ParseResult { Data = t });
                         }
@@ -68,11 +79,11 @@ namespace TgBot.SmartLedger
                         NextField = d => Task.FromResult(FIELD_ACOUNT_PAYER),
                         ParseFunction = (bot, text, cancelationToken) =>
                         {
-                            if(double.TryParse(text,out var v))
+                            if (double.TryParse(text, out var v))
                             {
                                 if (v < 0)
                                     return Task.FromResult(new ParseResult { Error = "Negative value not allowed." });
-                                return Task.FromResult(new ParseResult { Data = IntData.toIntMoney(v)});
+                                return Task.FromResult(new ParseResult { Data = IntData.toIntMoney(v) });
                             }
                             return Task.FromResult(new ParseResult { Error = "Enter just the amount." });
                         }
@@ -83,29 +94,19 @@ namespace TgBot.SmartLedger
                     {
                         Prompt = "Who makes payments for this account?",
                         FieldType = FieldType.Choices,
-                        NextField = d => Task.FromResult<String>(FIELD_ACOUNT_DEPOSITOR),
-                        Choices= SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        NextField = d => Task.FromResult(FIELD_ACOUNT_DEPOSITOR),
+                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
                     };
                 case FIELD_ACOUNT_DEPOSITOR:
                     return new FormDialogField
                     {
                         Prompt = "Who makes deposits to this account?",
                         FieldType = FieldType.Choices,
-                        NextField = d => Task.FromResult<String>(null),
+                        NextField = d => Task.FromResult<string>(null),
                         Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
                     };
             }
             return null;
-        }
-        public AddCashAccountDialog(SmartLedgerService service,TgDbService tgService,ChatId chatId, User from) : base(chatId, from)
-        {
-            this.service = service;
-            this.tgService = tgService;
-        }
-        public override void SetServices(IServiceProvider services)
-        {
-            this.service = services.GetService<SmartLedgerService>();
-            this.tgService = services.GetService<TgDbService>();
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
@@ -143,7 +144,7 @@ namespace TgBot.SmartLedger
                      {
                          AccountId = id,
                          Payer = (string)FieldData[FIELD_ACOUNT_PAYER].Val(),
-                         Depositor= (string)FieldData[FIELD_ACOUNT_DEPOSITOR].Val()
+                         Depositor = (string)FieldData[FIELD_ACOUNT_DEPOSITOR].Val()
                      });
                      return new PaymentFlowRule
                      {
@@ -154,8 +155,8 @@ namespace TgBot.SmartLedger
                  });
 
                 await SmartLedgerBot.RestartAsync(bot, chatId, from, "The account is added", cancellationToken);
-                await SetupFlowDialog.NotifyPayerAssignment(bot,service,tgService, (string)FieldData[FIELD_ACOUNT_PAYER].Val(), null,false,cashAccountId, cancellationToken);
-                await SetupFlowDialog.NotifyPayerAssignment(bot,service,tgService, (string)FieldData[FIELD_ACOUNT_DEPOSITOR].Val(), null, true, cashAccountId, cancellationToken);
+                await SetupFlowDialog.NotifyPayerAssignment(bot, service, tgService, (string)FieldData[FIELD_ACOUNT_PAYER].Val(), null, false, cashAccountId, cancellationToken);
+                await SetupFlowDialog.NotifyPayerAssignment(bot, service, tgService, (string)FieldData[FIELD_ACOUNT_DEPOSITOR].Val(), null, true, cashAccountId, cancellationToken);
                 return DialogResult.Terminated;
             }
             catch (Exception ex)

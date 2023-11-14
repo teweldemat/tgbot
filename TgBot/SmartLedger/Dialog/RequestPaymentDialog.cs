@@ -8,7 +8,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TgBot.TgDb;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
     public enum PaymentType
     {
@@ -23,76 +23,31 @@ namespace TgBot.SmartLedger
         const string FIELD_TO = "To";
         const string FIELD_ATTACHMENT_PREFIX = "Attachment";
         const string MORE_ATTACHMENT_PREFIX = "More Attachment";
-
-        public long Amount() => (long)base.FieldData[FIELD_AMOUNT].Val();
-        public String Note() => (string)base.FieldData[FIELD_NOTE].Val();
         public PaymentType PaymentType { get; set; }
         public Guid? RestartPayment { get; set; }
-        public String PaymenTypeText(bool caps = false) => caps ? PaymentType.ToString() : PaymentType.ToString().ToLower();
+        
+        
         SmartLedgerService service;
         TgDbService tgService;
-        public RequestPaymentDialog(SmartLedgerService service,TgDbService tgService, ChatId chatId, User from, PaymentType paymentType = PaymentType.Payment, Guid? restartPayment = null) : base(chatId, from)
+        public RequestPaymentDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, PaymentType paymentType = PaymentType.Payment, Guid? restartPayment = null) 
+            : base(chatId, from)
         {
-            this.PaymentType = paymentType;
-            this.RestartPayment = restartPayment;
+            PaymentType = paymentType;
+            RestartPayment = restartPayment;
             this.service = service;
             this.tgService = tgService;
         }
 
         public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<SmartLedgerService>();
-            this.tgService = services.GetService<TgDbService>();
+            service = services.GetService<SmartLedgerService>();
+            tgService = services.GetService<TgDbService>();
         }
-        protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
-        {
-            var guid = service.CreatePaymentFlow(
-                from.Id.ToString(),
-                this.Note(),
-                this.PaymentType == PaymentType.Deposit ? -this.Amount() : this.Amount(),
-                this.PaymentType == PaymentType.Transfer ? null : (string)base.FieldData[FIELD_TO].Val(),
-                this.PaymentType == PaymentType.Transfer ? (Guid)base.FieldData[FIELD_TO].Val() : null,
-                this.Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
-                {
-                    Image = x.Image,
-                    ImgeMime = x.ImageMime,
-                    LinkedImage = x.ContentLink,
-                    LinkedImageType = "1"
-                }).ToList(),
-                this.RestartPayment
-            );
-            var payment = service.GetPayment(guid);
-            try
-            {
-                await bot.SendTextMessageAsync(chatId, "The request is registered");
-            }
-            catch (Exception ex)
-            {
-                TGBot.LogException("CRITICAL: Error send confirmation for request creation", ex);
-            }
 
-            try
-            {
-                var state = tgService.GetUserState(from.Id.ToString());
-                await SmartLedgerBot.NotifyGroups(bot,tgService, $"{TGBot.FullName(from)} requested {System.Web.HttpUtility.HtmlEncode(IntData.toString(this.Amount()))} Birr"
-                    + $"<pre>\n</pre> {SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}", true, cancellationToken);
-                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
-                if (config != null && config.Checker1 != null)
-                {
-                    var user = new User();
-                    user.Id = long.Parse(config.Checker1);
-                    user.FirstName = "Unknown";
-                    await TGBot.PushDialog(config.Checker1, new PaymentDetailDialog(service, tgService, config.Checker1, user, guid), cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                TGBot.LogException("Error notifying groups and checkers of creation", ex);
-            }
-            return DialogResult.Terminated;
-        }
+        public long Amount() => (long)FieldData[FIELD_AMOUNT].Val();
+        public string Note() => (string)FieldData[FIELD_NOTE].Val();
+        public string PaymenTypeText(bool caps = false) => caps ? PaymentType.ToString() : PaymentType.ToString().ToLower();
         public override string FirstField => FIELD_AMOUNT;
-
         public override FormDialogField GetFieldDef(string key)
         {
             switch (key)
@@ -124,16 +79,16 @@ namespace TgBot.SmartLedger
                 case FIELD_NOTE:
                     return new FormDialogField
                     {
-                        Prompt = $"What is the purpose of the {this.PaymenTypeText()}?",
+                        Prompt = $"What is the purpose of the {PaymenTypeText()}?",
                         FieldType = FieldType.Text,
                         NextField = d => Task.FromResult(FIELD_TO)
                     };
                 case FIELD_TO:
-                    if (this.PaymentType == PaymentType.Transfer)
+                    if (PaymentType == PaymentType.Transfer)
                     {
                         return new FormDialogField
                         {
-                            Prompt = Program.lm.payment_request_subject_question(this.PaymentType),
+                            Prompt = Program.lm.payment_request_subject_question(PaymentType),
                             FieldType = FieldType.Choices,
                             Choices = service.GetCashAccounts().Select(x =>
                                     new FormFieldChoiceItem(x.Id.ToString(), x.Name)).ToList(),
@@ -148,7 +103,7 @@ namespace TgBot.SmartLedger
                     {
                         return new FormDialogField
                         {
-                            Prompt = Program.lm.payment_request_subject_question(this.PaymentType),
+                            Prompt = Program.lm.payment_request_subject_question(PaymentType),
                             FieldType = FieldType.Text,
                             NextField = d => Task.FromResult(FIELD_ATTACHMENT_PREFIX + "0")
                         };
@@ -181,5 +136,53 @@ namespace TgBot.SmartLedger
             }
             return null;
         }
+        protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
+        {
+            var guid = service.CreatePaymentFlow(
+                from.Id.ToString(),
+                Note(),
+                PaymentType == PaymentType.Deposit ? -Amount() : Amount(),
+                PaymentType == PaymentType.Transfer ? null : (string)FieldData[FIELD_TO].Val(),
+                PaymentType == PaymentType.Transfer ? (Guid)base.FieldData[FIELD_TO].Val() : null,
+                Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
+                {
+                    Image = x.Image,
+                    ImgeMime = x.ImageMime,
+                    LinkedImage = x.ContentLink,
+                    LinkedImageType = "1"
+                }).ToList(),
+                RestartPayment
+            );
+            var payment = service.GetPayment(guid);
+            try
+            {
+                await bot.SendTextMessageAsync(chatId, "The request is registered");
+            }
+            catch (Exception ex)
+            {
+                TGBot.LogException("CRITICAL: Error send confirmation for request creation", ex);
+            }
+
+            try
+            {
+                var state = tgService.GetUserState(from.Id.ToString());
+                await SmartLedgerBot.NotifyGroups(bot, tgService, $"{TGBot.FullName(from)} requested {System.Web.HttpUtility.HtmlEncode(IntData.toString(Amount()))} Birr"
+                    + $"\n {SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}", true, cancellationToken);
+                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+                if (config != null && config.Checker1 != null)
+                {
+                    var user = new User();
+                    user.Id = long.Parse(config.Checker1);
+                    user.FirstName = "Unknown";
+                    await TGBot.PushDialog(config.Checker1, new PaymentDetailDialog(service, tgService, config.Checker1, user, guid), cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                TGBot.LogException("Error notifying groups and checkers of creation", ex);
+            }
+            return DialogResult.Terminated;
+        }
+
     }
 }

@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Threading.Tasks;
+using TgBot.SmartLedger.Dialog;
 using TgBot.TgDb;
 using static TgBot.FormDialog;
 
@@ -147,6 +148,12 @@ namespace TgBot.SmartLedger
         public Guid AuditId { get; set; }
     }
 
+    public enum TransactionReverseRole
+    {
+        None,
+        Reversed,
+        Reverse
+    }
     [Table("Transaction")]
     public class Transaction
     {
@@ -156,6 +163,7 @@ namespace TgBot.SmartLedger
         public Guid AuditId { get; set; }
         public String Remark { get; set; }
         public Guid? Payment { get; set; }
+        public TransactionReverseRole ReverseRole { get; set; } = TransactionReverseRole.None;
     }
     [Table("CashLedgerEntry")]
     public class CashLedgerEntry
@@ -166,6 +174,7 @@ namespace TgBot.SmartLedger
         public long Time { get; set; }
         public long Amount { get; set; }
         public String Remark { get; set; }
+        public int DisplayOrder { get; set; }
 
     }
 
@@ -236,6 +245,9 @@ namespace TgBot.SmartLedger
         public long Amount { get; set; }
         public String Reference { get; set; }
         public string PaymentInstruction { get; set; }
+        public long PayerFee { get; set; }
+        public long PayeeFee { get; set; }
+
     }
     [Table("PaymentWorkItem")]
     public class PaymentWorkItem:WorkItem
@@ -253,7 +265,7 @@ namespace TgBot.SmartLedger
         public const int WORK_TYPE_ACCOUNT_REJECT = 11;
         public const int WORK_TYPE_SEND_BACK_TO_PAYMENT = 12;
         public const int WORK_TYPE_SEND_BACK_TO_ACCOUNTING = 13;
-        public const int WORK_TYPE_RESTART = 14;
+        public const int WORK_TYPE_VOID = 15;
 
         public Guid PaymentId {get;set;}
         public static String StatusString(int workType, Payment payment)
@@ -282,12 +294,12 @@ namespace TgBot.SmartLedger
                     return "Accounting Rejected, Sent Back for Accounting";
                 case PaymentWorkItem.WORK_TYPE_CANT_PAY:
                     return $"{Program.lm.payment_verb(payment, capitalize: true)} Declined";
-                case PaymentWorkItem.WORK_TYPE_RESTART:
-                    return $"Restarted, waiting updating of request";
                 case PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_ACCOUNTING:
                     return "Sent back to accounting, Waiting for Accounting to be Redone";
                 case PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_PAYMENT:
                     return "Sent back to accounting, Waiting for Payment to be Redone";
+                case PaymentWorkItem.WORK_TYPE_VOID:
+                    return "Payment voided";
 
             }
             return "";
@@ -334,8 +346,9 @@ namespace TgBot.SmartLedger
                     return "Accounting Rejected";
                 case PaymentWorkItem.WORK_TYPE_CANT_PAY:
                     return "Paid";
-                case PaymentWorkItem.WORK_TYPE_RESTART:
-                    return "Restarted";
+                case PaymentWorkItem.WORK_TYPE_VOID:
+                    return "Payment voided";
+
             }
             return "Unknown Action Done";
         }

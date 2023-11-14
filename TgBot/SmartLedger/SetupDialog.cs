@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TgBot.SmartLedger.Dialog;
 using TgBot.TgDb;
 
 namespace TgBot.SmartLedger

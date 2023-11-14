@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,100 +8,90 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TgBot.TgDb;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
-
-    public class PayRejectDialog : RejectDialogBase
-    {
-        protected override int WorkType => PaymentWorkItem.WORK_TYPE_CANT_PAY;
-
-        protected override IEnumerable<string> NextStage
-        {
-            get
-            {
-                var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
-                var ret = new List<String>();
-                if (config == null)
-                    return ret;
-
-                if (config.Approver1 != null)
-                    ret.Add(config.Approver1);
-                return ret;
-            }
-        }
-
-        SmartLedgerService service;
-        TgDbService tgService;
-        public PayRejectDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(service, tgService, chatId, from, paymentId)
-        {
-            this.PaymentId = paymentId;
-            this.service = service;
-            this.tgService = tgService;
-        }
-        public override void SetServices(IServiceProvider services)
-        {
-            this.service = services.GetService<SmartLedgerService>();
-            this.tgService = services.GetService<TgDbService>();
-        }
-        protected override string GroupNotification(string rejecterName, Payment payment) => null;
-
-        protected override string OwnerNotification(string rejecterName, Payment payment) => null;
-
-
-
-    }
     public class PayDialog : FormDialog
     {
-        const String FIELD_NOTE = "Note";
+        const string FIELD_NOTE = "Note";
         const string FIELD_ATTACHMENT_PREFIX = "Attachment";
         const string MORE_ATTACHMENT_PREFIX = "More Attachment";
-
-        public Payment payment { get; set; }
-        public override string FirstField => FIELD_ATTACHMENT_PREFIX + "0";
+        const string FIELD_PAYER_FEE = "PayerFee_";
+        const string FIELD_PAYEE_FEE = "PayeeFee_";
+        public Guid PaymentId { get; set; } 
+        Payment payment { get; set; }
         SmartLedgerService service;
         TgDbService tgService;
-        public PayDialog(SmartLedgerService service, TgDbService tgService,ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        void init()
         {
-            this.tgService = tgService;
-            this.service = service;
-            this.payment = service.GetPayment(paymentId);
+            payment = service.GetPayment(this.PaymentId);
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
             if (config == null)
                 throw new UserFriendlyError("Configuration not set");
+
+        }
+        public PayDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(chatId, from)
+        {
+            this.tgService = tgService;
+            this.service = service;
+            this.PaymentId= paymentId;
+            if (this.service != null)
+                init();
         }
         public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<SmartLedgerService>();
-            this.tgService = services.GetService<TgDbService>();
+            service = services.GetServiceAssert<SmartLedgerService>();
+            tgService = services.GetServiceAssert<TgDbService>();
+            init();
         }
+
+        public override string FirstField => FIELD_PAYER_FEE + "0";
         public override FormDialogField GetFieldDef(string key)
         {
-            switch (key)
+            var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+
+            var allSources = service.GetPaymentSources(payment.Id);
+            var sources = allSources.Where(x => config.IsPayer(from.Id.ToString(), x.CashAccountId, payment.IsDeposit))
+                .OrderBy(x => x.CashAccountId)
+                .ToList();
+
+            if (key.StartsWith(FIELD_PAYER_FEE) || key.StartsWith(FIELD_PAYEE_FEE))
             {
-                case FIELD_NOTE:
-                    return new FormDialogField
+                int sourceIndex = int.Parse(key.Split('_')[1]);
+                var source = sources.ElementAtOrDefault(sourceIndex);
+                if (source == null) return null; // Error handling if source doesn't exist
+                var account = service.GetCashAccount(source.CashAccountId);
+                bool isPayerFee = key.StartsWith("PayerFee_");
+                string prompt = isPayerFee ? $"Enter the transaction fee paid by the payer for {account.Name}" :
+                                             $"Enter the transaction fee paid by the beneficiary for {account.Name}";
+
+                string nextKey = isPayerFee ? $"{FIELD_PAYEE_FEE}{sourceIndex}" : sourceIndex + 1 < sources.Count ? $"{FIELD_PAYER_FEE}{sourceIndex + 1}" : FIELD_ATTACHMENT_PREFIX + "0";
+
+                return new FormDialogField
+                {
+                    Prompt = prompt,
+                    FieldType = FieldType.Text,
+                    NextField = d => Task.FromResult(nextKey),
+                    ParseFunction = (bot, t, c) =>
                     {
-                        Prompt = "Enter remarks",
-                        FieldType = FieldType.Text,
-                        NextField = null,
-                    };
+                        if (double.TryParse(t, out var d) && d >= 0)
+                            return Task.FromResult(new ParseResult { Data = IntData.toIntMoney(d) });
+                        else
+                            return Task.FromResult(new ParseResult { Error = "Invalid fee amount" });
+                    }
+                };
             }
             if (key.StartsWith(FIELD_ATTACHMENT_PREFIX))
             {
                 int index = int.Parse(key.Substring(FIELD_ATTACHMENT_PREFIX.Length));
-                String inst;
+                string inst;
                 if (index == 0)
                 {
-                    var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
-
-                    var sources = service.GetPaymentSources(this.payment.Id);
-                    sources = sources.Where(x => config.IsPayer(from.Id.ToString(), x.CashAccountId, payment.IsDeposit)).ToList();
-                    if (this.payment.IsDeposit)
-                        inst = $"Recieve from {this.payment.ToPayTo} as follows:";
-                    else if (this.payment.IsTransferTransaction)
-                        inst = $"Transfer to {service.GetCashAccount(this.payment.TransferTo.Value).Name} as follows:";
+                    if (payment.IsDeposit)
+                        inst = $"Recieve from {payment.ToPayTo} as follows:";
+                    else if (payment.IsTransferTransaction)
+                        inst = $"Transfer to {service.GetCashAccount(payment.TransferTo.Value).Name} as follows:";
                     else
-                        inst = $"Pay for {this.payment.ToPayTo} as follows:";
+                        inst = $"Pay for {payment.ToPayTo} as follows:";
                     foreach (var s in sources)
                     {
                         inst += "\n" + Program.lm.payment_action(payment, service.GetCashAccount(s.CashAccountId).Name
@@ -134,26 +123,48 @@ namespace TgBot.SmartLedger
                     }
                 };
             }
-            return null;
+            switch (key)
+            {
+                case FIELD_NOTE:
+                    return new FormDialogField
+                    {
+                        Prompt = "Enter remarks",
+                        FieldType = FieldType.Text,
+                        NextField = null,
+                    };
+            }
+
+            throw new InvalidOperationException($"Invalid field {key}");
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
             var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
 
-            var sources = service.GetPaymentSources(this.payment.Id);
-            sources = sources.Where(x => config.IsPayer(from.Id.ToString(), x.CashAccountId, payment.IsDeposit)).ToList();
+            var allSources = service.GetPaymentSources(payment.Id);
+            var sources = allSources.Where(x => config.IsPayer(from.Id.ToString(), x.CashAccountId, payment.IsDeposit))
+                .OrderBy(x => x.CashAccountId)
+                .ToList();
+
             var total = sources.Sum(x => x.Amount);
             bool fullPayment = total == payment.Amount;
+
+            foreach (var source in sources)
+            {
+                int sourceIndex = sources.IndexOf(source);
+                source.PayerFee = (long)FieldData[$"PayerFee_{sourceIndex}"].Val();
+                source.PayeeFee = (long)FieldData[$"PayeeFee_{sourceIndex}"].Val();
+            }
+
 
             service.AddPaymentWorkItem(
                 userId: from.Id.ToString(),
                 work: new PaymentWorkItem
                 {
-                    PaymentId = this.payment.Id,
+                    PaymentId = payment.Id,
                     WorkType = PaymentWorkItem.WORK_TYPE_PAY,
-                    Note = (String)FieldData[FIELD_NOTE].Val(),
+                    Note = (string)FieldData[FIELD_NOTE].Val(),
                 },
-                attachments: this.Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
+                attachments: Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
                 {
                     Image = x.Image,
                     ImgeMime = x.ImageMime,
@@ -193,7 +204,7 @@ namespace TgBot.SmartLedger
                         var user = new User();
                         user.Id = long.Parse(next);
                         user.FirstName = "Unknown";
-                        await TGBot.PushDialog(next, new PaymentDetailDialog(service,tgService, next, user, payment.Id), cancellationToken);
+                        await TGBot.PushDialog(next, new PaymentDetailDialog(service, tgService, next, user, payment.Id), cancellationToken);
                     }
                 }
             }

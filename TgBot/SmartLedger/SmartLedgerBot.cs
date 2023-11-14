@@ -9,6 +9,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TgBot.SmartLedger.AccountReconciliation;
+using TgBot.SmartLedger.Dialog;
 using TgBot.TgDb;
 
 namespace TgBot.SmartLedger
@@ -50,7 +51,7 @@ namespace TgBot.SmartLedger
                     await bot.SendTextMessageAsync(
                     chatId: chatId,
                     text: "Welcome");
-                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                    await TGBot.PushDialog(from.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb, SmartLedgerService>(service, chatId, from), cancellationToken);
                     return true;
                 }
                 var entity = service.GetEntity();
@@ -160,7 +161,7 @@ namespace TgBot.SmartLedger
                                 }
                                 if (MAIN_SET_USER_PROFILE.Equals(msg.Text))
                                 {
-                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service,msg.Chat.Id, msg.From), cancellationToken);
+                                    await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb, SmartLedgerService>(service, msg.Chat.Id, msg.From), cancellationToken);
                                     return true;
                                 }
                                 //from this onward only permited users
@@ -183,19 +184,19 @@ namespace TgBot.SmartLedger
                                         if (config != null && config.Rule != null)
                                         {
                                             // Existing configuration found, show ConfigurationViewer
-                                            await TGBot.PushDialog(msg.From.Id.ToString(), new ConfigurationViewer(service,tgService, msg.Chat.Id, msg.From), cancellationToken);
+                                            await TGBot.PushDialog(msg.From.Id.ToString(), new ConfigurationViewer(service, tgService, msg.Chat.Id, msg.From), cancellationToken);
                                         }
                                         else
                                         {
                                             // No configuration found, proceed with SetupFlowDialog
-                                            await TGBot.PushDialog(msg.From.Id.ToString(), new SetupFlowDialog(service,tgService, msg.Chat.Id, msg.From), cancellationToken);
+                                            await TGBot.PushDialog(msg.From.Id.ToString(), new SetupFlowDialog(service, tgService, msg.Chat.Id, msg.From), cancellationToken);
                                         }
                                         return true;
                                     case MAIN_ADD_CASH_ACCOUNT:
-                                        await TGBot.PushDialog(msg.From.Id.ToString(), new AddCashAccountDialog(service,tgService, msg.Chat.Id, msg.From), cancellationToken);
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new AddCashAccountDialog(service, tgService, msg.Chat.Id, msg.From), cancellationToken);
                                         return true;
                                     case MAIN_SET_USER_PROFILE:
-                                        await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb>(service, msg.Chat.Id, msg.From), cancellationToken);
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new SetUserProfileDialog<SmartLedgerDb, SmartLedgerService>(service, msg.Chat.Id, msg.From), cancellationToken);
                                         return true;
                                     case MAIN_REQUEST_PAYMENT:
                                         await TGBot.PushDialog(msg.From.Id.ToString(), new RequestPaymentDialog(service, tgService, msg.Chat.Id, msg.From), cancellationToken);
@@ -210,7 +211,7 @@ namespace TgBot.SmartLedger
                                         await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentListViewer(service, msg.Chat.Id, msg.From), cancellationToken);
                                         return true;
                                     case MAIN_SHOW_ACCOUNTS:
-                                        await TGBot.PushDialog(msg.From.Id.ToString(), new AccountListViewer(service,tgService, msg.Chat.Id, msg.From), cancellationToken);
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new AccountListViewer(service, tgService, msg.Chat.Id, msg.From), cancellationToken);
                                         return true;
                                 }
                             }
@@ -223,26 +224,24 @@ namespace TgBot.SmartLedger
         }
         public static String FormatPaymentDetailHtml(Guid id)
         {
-
             using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
                 var service = serviceProvider.GetService<SmartLedgerService>();
                 var p = service.GetPayment(id);
                 var statusString = $"{(p.HeadType == null ? "Unknown" : PaymentWorkItem.StatusString(p.HeadType.Value, p))}";
-                var text =
-                    p.IsDeposit
-                    ? $"Reference: {p.Reference}"
-                    + $"<pre>\n</pre>Amount: {IntData.toString(p.PositiveAmount)}"
-                    + $"<pre>\n</pre>Paid From:{p.ToPayTo}"
-                    + $"<pre>\n</pre>Paid for: {p.Note}"
-                    + $"<pre>\n</pre>Status: {statusString}"
+                var text = p.IsDeposit
+                    ? $"<b>Reference:</b> <a href=\"{p.Reference}\">{p.Reference}</a>"
+                    + $"\n<b>Amount:</b> {IntData.toString(p.PositiveAmount)}"
+                    + $"\n<b>Paid From:</b> {p.ToPayTo}"
+                    + $"\n<b>Paid for:</b> {p.Note}"
+                    + $"\n<b>Status:</b> {statusString}"
 
-                    : $"Reference: {p.Reference}"
-                    + $"<pre>\n</pre>Amount: {IntData.toString(p.PositiveAmount)}"
-                    + $"<pre>\n</pre>To:{p.ToPayTo}"
-                    + $"<pre>\n</pre>Purpose: {p.Note}"
-                    + $"<pre>\n</pre>Status: {statusString}"
-                    ;
+                    : $"<b>Reference:</b> <a href=\"{p.Reference}\">{p.Reference}</a>"
+                    + $"\n<b>Amount:</b> {IntData.toString(p.PositiveAmount)}"
+                    + $"\n<b>To:</b> {p.ToPayTo}"
+                    + $"\n<b>Purpose:</b> {p.Note}"
+                    + $"\n<b>Status:</b> {statusString}";
+
                 if (p.WorkItemHead != null)
                 {
                     var w = service.GetWorkItem(p.WorkItemHead.Value);
@@ -250,43 +249,44 @@ namespace TgBot.SmartLedger
                     switch (w.WorkType)
                     {
                         case PaymentWorkItem.WORK_TYPE_CREATE:
-                            text += $"<pre>\n</pre>Requested By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\n<b>Requested By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case PaymentWorkItem.WORK_TYPE_CHECK:
-                            text += $"<pre>\n</pre>Checked By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\n<b>Checked By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case PaymentWorkItem.WORK_TYPE_APPROVE:
-                            text += $"<pre>\n</pre>Approved By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\n<b>Approved By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case PaymentWorkItem.WORK_TYPE_ACCOUNT:
-                            text += $"<pre>\n</pre>Accounted By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\n<b>Accounted By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case PaymentWorkItem.WORK_TYPE_CLOSE:
-                            text += $"<pre>\n</pre>Closed By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\n<b>Closed By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case PaymentWorkItem.WORK_TYPE_PAY:
                             if (p.IsDeposit)
-                                text += $"<pre>\n</pre>Received By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                                text += $"\n<b>Received By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             else if (p.IsTransferTransaction)
-                                text += $"<pre>\n</pre>Trasnfered By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                                text += $"\n<b>Transferred By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             else
-                                text += $"<pre>\n</pre>Paid By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                                text += $"\n<b>Paid By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case PaymentWorkItem.WORK_TYPE_CANT_PAY:
                             if (p.IsDeposit)
-                                text += $"<pre>\n</pre>Deposit declined by :{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                                text += $"\n<b>Deposit Declined By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             else if (p.IsTransferTransaction)
-                                text += $"<pre>\n</pre>Transfer declined by :{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                                text += $"\n<b>Transfer Declined By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             else
-                                text += $"<pre>\n</pre>Payment declined by :{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                                text += $"\n<b>Payment Declined By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                     }
-                    text += $"<pre>\n</pre>Remark: {w.Note}";
+                    text += $"\n<b>Remark:</b> {w.Note}";
                 }
-                text += $"<pre>\n</pre>{SmartLedgerBot.PaymentLink(p.Id, p.Reference)}";
+                text += $"\n{SmartLedgerBot.PaymentLink(p.Id, p.Reference)}";
                 return text;
             }
         }
+
 
         public static String FormatReconciliationDetailHtml(Guid id)
         {
@@ -297,11 +297,11 @@ namespace TgBot.SmartLedger
                 var statusString = $"{(r.HeadType == null ? "Unknown" : ReconciliationWorkItem.StatusString(r.HeadType.Value))}";
                 var account = service.GetCashAccount(r.AccountId);
                 var text = $"Reference: {r.Reference}"
-                            + $"<pre>\n</pre>Account: {account.Name} ({account.Code})"
-                           + $"<pre>\n</pre>Ledger Balance: {IntData.toString(r.AccountBalance)}"
-                           + $"<pre>\n</pre>Actual Balance: {IntData.toString(r.Balance)}"
-                           + $"<pre>\n</pre>Remark: {r.Note}"
-                           + $"<pre>\n</pre>Status: {statusString}";
+                            + $"\nAccount: {account.Name} ({account.Code})"
+                           + $"\nLedger Balance: {IntData.toString(r.AccountBalance)}"
+                           + $"\nActual Balance: {IntData.toString(r.Balance)}"
+                           + $"\nRemark: {r.Note}"
+                           + $"\nStatus: {statusString}";
 
                 if (r.WorkItemHead != null)
                 {
@@ -310,23 +310,23 @@ namespace TgBot.SmartLedger
                     switch (w.WorkType)
                     {
                         case ReconciliationWorkItem.WORK_TYPE_REQUEST:
-                            text += $"<pre>\n</pre>Requested By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\nRequested By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case ReconciliationWorkItem.WORK_TYPE_APPROVE:
-                            text += $"<pre>\n</pre>Approved By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\nApproved By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                         case ReconciliationWorkItem.WORK_TYPE_REJECTED:
-                            text += $"<pre>\n</pre>Rejected By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            text += $"\nRejected By:{userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
                     }
-                    text += $"<pre>\n</pre>Remark: {w.Note}";
+                    text += $"\nRemark: {w.Note}";
                 }
-                text += $"<pre>\n</pre>{ReconciliationLink(r.Id, r.Reference)}";
+                text += $"\n{ReconciliationLink(r.Id, r.Reference)}";
                 return text;
             }
         }
 
-        internal static Task NotifyGroups(ITelegramBotClient bot,TgDbService tgService,  object p, bool v, CancellationToken cancellationToken)
+        internal static Task NotifyGroups(ITelegramBotClient bot, TgDbService tgService, object p, bool v, CancellationToken cancellationToken)
         {
             return Task.FromResult(0);
         }
@@ -370,13 +370,13 @@ namespace TgBot.SmartLedger
                         var payment = service.GetPaymentByRef(taskCode);
                         if (payment != null)
                         {
-                            await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentDetailDialog(service,tgService, msg.Chat.Id, msg.From, payment.Id), cancellationToken);
+                            await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentDetailDialog(service, tgService, msg.Chat.Id, msg.From, payment.Id), cancellationToken);
                             return true;
                         }
                         var reconciliation = service.GetReconciliationByRef(taskCode);
                         if (reconciliation != null)
                         {
-                            await TGBot.PushDialog(msg.From.Id.ToString(), new ReconciliationDetailDialog(service,msg.Chat.Id, msg.From, reconciliation.Id), cancellationToken);
+                            await TGBot.PushDialog(msg.From.Id.ToString(), new ReconciliationDetailDialog(service, msg.Chat.Id, msg.From, reconciliation.Id), cancellationToken);
                             return true;
                         }
                     }

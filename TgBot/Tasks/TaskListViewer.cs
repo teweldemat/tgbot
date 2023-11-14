@@ -62,11 +62,11 @@ namespace TgBot.Tasks
                     foreach (var f in tasks)
                     {
                         var html = FormatPayment(coreService, f, $"{index + n}. ");
-                        listHtml = listHtml == null ? html : (listHtml + "<pre>\n\n</pre>" + html);
+                        listHtml = listHtml == null ? html : (listHtml + "\n" + html);
                         n++;
                     }
                     if (filterText != null)
-                        listHtml += $"<pre>\n\n</pre>Showing tasks containing text: <i>{filterText}</i>.<pre>\n</pre>Enter /clear to remove the filter";
+                        listHtml += $"\nShowing tasks containing text: <i>{filterText}</i>.\nEnter /clear to remove the filter";
                     if (nextButtonShown)
                     {
                         await bot.EditMessageReplyMarkupAsync(chatId, this.buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));

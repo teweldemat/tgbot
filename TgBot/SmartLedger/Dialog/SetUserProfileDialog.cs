@@ -1,29 +1,34 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
-    public class SetUserProfileDialog<T>:FormDialog where T:TgBotDb
+    public class SetUserProfileDialog<T, TS> : FormDialog where T : TgBotDb where TS : TgBotService<T>
     {
         const string FIELD_SPECIFY_NAME = "SpecifyName";
         const string FIELD_NAME = "Name";
-        const String FIELD_SHORT_NAME = "ShortName";
-        const String FIELD_GENDER= "Gender";
-        TgBotService<T> service;
+        const string FIELD_SHORT_NAME = "ShortName";
+        const string FIELD_GENDER = "Gender";
+        
+        TS service;
         bool UpdateMode => service.GetUserProfile(from.Id.ToString()) != null;
-        public SetUserProfileDialog(TgBotService<T> service, ChatId chatId, User from) : base(chatId, from)
+        public SetUserProfileDialog(TS service, ChatId chatId, User from) : base(chatId, from)
         {
             this.service = service;
         }
         public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<TgBotService<T>>();
+            service = services.GetService<TS>();
+            if (service == null)
+                throw new InvalidOperationException($"Sevice {typeof(TgBotService<T>)} could not be loaded");
         }
-        public override string FirstField => UpdateMode?FIELD_NAME: FIELD_SPECIFY_NAME;
+        [JsonIgnore]
+        public override string FirstField => UpdateMode ? FIELD_NAME : FIELD_SPECIFY_NAME;
 
         public override FormDialogField GetFieldDef(string key)
         {
@@ -66,19 +71,19 @@ namespace TgBot.SmartLedger
         }
         protected override async Task<DialogResult> OnCompleteAsync(ITelegramBotClient bot, CancellationToken cancellationToken)
         {
-            String name;
+            string name;
             if (FieldData.ContainsKey(FIELD_SPECIFY_NAME) && !"YES".Equals(FieldData[FIELD_SPECIFY_NAME].Val()))
                 name = TGBot.FullName(from);
             else
-                name = (String)FieldData[FIELD_NAME].Val();
+                name = (string)FieldData[FIELD_NAME].Val();
             service.SetPaymentProfile(new MisUserProfile
             {
                 UserId = from.Id.ToString(),
                 FullName = name,
-                ShortName = (String)FieldData[FIELD_SHORT_NAME].Val(),
-                Gender = Enum.Parse<MisUserProfile.GenderType>((String)FieldData[FIELD_GENDER].Val())
+                ShortName = (string)FieldData[FIELD_SHORT_NAME].Val(),
+                Gender = Enum.Parse<MisUserProfile.GenderType>((string)FieldData[FIELD_GENDER].Val())
             });
-            await bot.SendTextMessageAsync(this.chatId, $"Profile saved",cancellationToken:cancellationToken);
+            await bot.SendTextMessageAsync(chatId, $"Profile saved", cancellationToken: cancellationToken);
             return DialogResult.Terminated;
         }
     }

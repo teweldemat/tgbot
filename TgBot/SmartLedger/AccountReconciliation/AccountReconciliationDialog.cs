@@ -71,7 +71,7 @@ namespace TgBot.SmartLedger.AccountReconciliation
                 var account = service.GetCashAccount(this.AccountId);
 
                 await SmartLedgerBot.NotifyGroups(bot,tgService, $"{TGBot.FullName(from)} requested balance of account {account.Name} to be reset to {System.Web.HttpUtility.HtmlEncode(IntData.toString(this.Balance()))} Birr"
-                    + $"<pre>\n</pre> {SmartLedgerBot.ReconciliationLink(econciliation.Id, econciliation.Reference)}", true, cancellationToken);
+                    + $"\n {SmartLedgerBot.ReconciliationLink(econciliation.Id, econciliation.Reference)}", true, cancellationToken);
                 var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
                 var e = service.GetEntity();
                 if (e?.Owner!=null)

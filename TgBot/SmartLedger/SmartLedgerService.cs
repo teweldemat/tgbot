@@ -8,162 +8,9 @@ using TgBot.SmartLedger.AccountReconciliation;
 
 namespace TgBot.SmartLedger
 {
-    public class TgBotService<T>: ServiceBase<T> where T:TgBotDb
-    {
-        protected delegate void AuditTransactNoReturnDelegate(T db, Guid aid);
-        protected delegate RetT AuditTransactionReturnDelegate<RetT>(T db, Guid aid);
-        protected delegate void ProcessDeltaBeforeSaveDelegate(Object deltaData);
-        public TgBotService(T db):base(db)
-        {
-        }
-        protected void AuditTransactNoReturn(String userId, String operation, object deltaData, long now, AuditTransactNoReturnDelegate f)
-        {
-            var aid = RecordAudit(userId, operation + "_attempt", deltaData, now, null, false);
-
-            var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
-            try
-            {
-                RecordAuditInternal(db, userId, operation, deltaData, now, aid);
-                f(db, aid);
-                db.SaveChanges();
-                tran.Commit();
-            }
-            catch (Exception ex)
-            {
-                tran.Rollback();
-                RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
-                throw;
-            }
-
-        }
-
-        protected T AuditTransactReturn<T>(String userId, String operation, object data, long now, AuditTransactionReturnDelegate<T> f)
-        {
-            var aid = RecordAudit(userId, operation + "_attempt", data, now, null, false);
-                var tran = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable);
-                try
-                {
-                    RecordAuditInternal(db, userId, operation, data, now, aid);
-                    var ret = f(db, aid);
-                    db.SaveChanges();
-                    tran.Commit();
-                    return ret;
-                }
-                catch (Exception ex)
-                {
-                    tran.Rollback();
-                    RecordAudit(userId, operation + "_error", Program.GetExceptionData(ex), now, aid, true);
-                    throw;
-                }
-            
-        }
-        Guid RecordAuditInternal(TgBotDb db, String userId, String operation, Object deltaData, long now, Guid? parent)
-        {
-            var a = new AuditRecord
-            {
-                Id = Guid.NewGuid(),
-                Time = now,
-                Operation = operation,
-                UserId = userId,
-                ParentRecord = parent,
-            };
-            db.AuditRecords.Add(a);
-            if (deltaData != null)
-            {
-                var delta = new MisDelta
-                {
-                    AuditId = a.Id,
-                    Data = Newtonsoft.Json.JsonConvert.SerializeObject(deltaData),
-                    DataType = deltaData.GetType().ToString(),
-                    RecordNo = db.DeltaRecords.Count() + 1,
-                    Version = 1,
-                    Time = now
-
-                };
-                db.DeltaRecords.Add(delta);
-            }
-            db.SaveChanges();
-            return a.Id;
-        }
-        Guid RecordAudit(String userId, String operation, Object deltaData, long now, Guid? parent, bool suppressError)
-        {
-            try
-            {
-                return TransactReturn<Guid>(db =>
-                {
-                    return RecordAuditInternal(db, userId, operation, deltaData, now, parent);
-                });
-            }
-            catch (Exception ex)
-            {
-                Program.LogException("Error trying to record audit", ex);
-                if (suppressError)
-                    return Guid.Empty;
-                throw;
-            }
-        }
-        public MisUserProfile GetUserProfile(String userId)
-            => DbRead(db => db.MisUserProfiles.AsNoTracking().Where(x => x.UserId.Equals(userId)).FirstOrDefault());
-        public List<MisUserProfile> GetAllUserProfiles()
-            => DbRead(db => db.MisUserProfiles.AsNoTracking().ToList());
-        public List<MisUserProfile> GetActiveUserProfiles()
-            => DbRead(db => db.MisUserProfiles.Where(x => x.Permitted).AsNoTracking().ToList());
-        public void SetPaymentProfile(MisUserProfile profile)
-        {
-            var now = TGBot.Now();
-            AuditTransactNoReturn(
-                profile.UserId, "SetPaymentProfile", profile, now,
-                (db, aid) =>
-                {
-                    var existing = db.MisUserProfiles.AsNoTracking().Where(x => x.UserId.Equals(profile.UserId)).FirstOrDefault();
-                    if (existing == null)
-                    {
-                        profile.AuditId = aid;
-                        profile.Permitted = true;
-                        db.MisUserProfiles.Add(profile);
-                    }
-                    else
-                    {
-                        profile.AuditId = aid;
-                        profile.Permitted = existing.Permitted;
-                        db.MisUserProfiles.Update(profile);
-                    }
-                    db.SaveChanges();
-                });
-        }
-        public CashEntity GetEntity() => DbRead(db => GetEntityInternal(db));
-        protected CashEntity GetEntityInternal(T db)
-        {
-            return db.CashEntities.AsNoTracking().FirstOrDefault();
-        }
-        public virtual Guid CreateEntity(String userId, String name, String ruleType, String ruleData)
-        {
-            var now = TGBot.Now();
-            return AuditTransactReturn<Guid>(
-                userId, "CreateEntity", new { name, ruleType, ruleData }, now,
-                (db, aid) =>
-                {
-
-                    if (string.IsNullOrEmpty(name))
-                        throw new UserFriendlyError("Name must provided");
-                    var entity = new CashEntity
-                    {
-                        Id = Guid.NewGuid(),
-                        Owner = userId,
-                        AuditId = aid,
-                        TransactionHead = null,
-                        Name = name
-                    };
-                    db.CashEntities.Add(entity);
-                    db.SaveChanges();
-                    return entity.Id;
-                });
-        }
-
-    }
     public class SmartLedgerService : TgBotService<SmartLedgerDb>
     {
-        public SmartLedgerService(SmartLedgerDb db):base(db)
+        public SmartLedgerService(SmartLedgerDb db) : base(db)
         {
 
         }
@@ -312,7 +159,7 @@ namespace TgBot.SmartLedger
             return db.Reconciliations.AsNoTracking().Where(x => x.Id == reconciliationId).FirstOrDefault();
         }
         public Reconciliation GetReconciliation(Guid reconciliationId)
-            => DbRead(db =>db.Reconciliations.AsNoTracking().Where(x => x.Id == reconciliationId).FirstOrDefault());
+            => DbRead(db => db.Reconciliations.AsNoTracking().Where(x => x.Id == reconciliationId).FirstOrDefault());
         private Payment GetPaymentByRefInternal(SmartLedgerDb db, String pref)
         {
             return db.Payments.AsNoTracking().Where(x => x.Reference.ToLower().Equals(pref.ToLower())).FirstOrDefault();
@@ -412,7 +259,7 @@ namespace TgBot.SmartLedger
                         UserId = userId,
                         WorkType = PaymentWorkItem.WORK_TYPE_CREATE,
                         PaymentId = p.Id,
-                        
+
                     };
                     p.WorkItemHead = w.Id;
                     p.HeadTime = w.Time;
@@ -474,7 +321,7 @@ namespace TgBot.SmartLedger
                         Time = now,
                         AccountId = accountId,
                         Balance = balance,
-                        AccountBalance=accountBalance,
+                        AccountBalance = accountBalance,
                         Note = note,
                         Creator = userId,
                     };
@@ -541,8 +388,8 @@ namespace TgBot.SmartLedger
 
 
 
-        public Guid AddReconciliationWorkItem(string userId, 
-            ReconciliationWorkItem work, 
+        public Guid AddReconciliationWorkItem(string userId,
+            ReconciliationWorkItem work,
             IList<WorkItemPicture> attachments = null)
         {
             var now = TGBot.Now();
@@ -558,7 +405,7 @@ namespace TgBot.SmartLedger
                     if (reconciliation == null)
                         throw new UserFriendlyError("Invalid reconciliation id: " + work.ReconciliationId);
 
-                    ReconciliationWorkItem w = AddReconciliationWorkItemInternal(db, userId, work, aid, now,reconciliation);
+                    ReconciliationWorkItem w = AddReconciliationWorkItemInternal(db, userId, work, aid, now, reconciliation);
 
                     reconciliation.WorkItemHead = w.Id;
                     reconciliation.HeadTime = w.Time;
@@ -571,7 +418,7 @@ namespace TgBot.SmartLedger
                         case ReconciliationWorkItem.WORK_TYPE_REQUEST:
                             break;
                         case ReconciliationWorkItem.WORK_TYPE_APPROVE:
-                            CreateLedgerEntryForReconciliation(db,e,reconciliation, w, account,now, aid);
+                            CreateLedgerEntryForReconciliation(db, e, reconciliation, w, account, now, aid);
                             break;
                     }
                     db.Reconciliations.Update(reconciliation);
@@ -581,8 +428,8 @@ namespace TgBot.SmartLedger
                 });
         }
 
-        private static ReconciliationWorkItem AddReconciliationWorkItemInternal(SmartLedgerDb db, string userId, ReconciliationWorkItem work, Guid aid, 
-            long now,Reconciliation reconciliation)
+        private static ReconciliationWorkItem AddReconciliationWorkItemInternal(SmartLedgerDb db, string userId, ReconciliationWorkItem work, Guid aid,
+            long now, Reconciliation reconciliation)
         {
             var w = new ReconciliationWorkItem
             {
@@ -593,14 +440,14 @@ namespace TgBot.SmartLedger
                 ReconciliationId = work.ReconciliationId,
                 Data = work.Data,
                 Note = work.Note,
-                PrevItem= reconciliation.WorkItemHead,
+                PrevItem = reconciliation.WorkItemHead,
                 WorkType = work.WorkType,
             };
             db.ReconciliationWorkItems.Add(w);
             return w;
         }
 
-        private CashAccount CreateLedgerEntryForReconciliation(SmartLedgerDb db,  CashEntity entity, Reconciliation reconciliation, ReconciliationWorkItem workItem, CashAccount account, long time, Guid aid)
+        private CashAccount CreateLedgerEntryForReconciliation(SmartLedgerDb db, CashEntity entity, Reconciliation reconciliation, ReconciliationWorkItem workItem, CashAccount account, long time, Guid aid)
         {
             var t = new Transaction
             {
@@ -608,22 +455,23 @@ namespace TgBot.SmartLedger
                 AuditId = aid,
                 PrevTransaction = entity.TransactionHead,
                 Payment = reconciliation.Id,
+                Time=time,
                 Remark = $"Change for request: {reconciliation.Note}({reconciliation.Reference})"
             };
             var entries = new List<CashLedgerEntry>();
-            if(entity.TransactionHead!=null)
+            if (entity.TransactionHead != null)
             {
-                var h = db.CashLedgerEntries.First(e => e.TransactionId== entity.TransactionHead.Value);
+                var h = db.CashLedgerEntries.First(e => e.TransactionId == entity.TransactionHead.Value);
                 if (h.Time > time)
                     throw new InvalidOperationException("The reconciliation can't be applied as transactions are performed after the reconciliation time");
             }
-            
-            
+
+
             entries.Add(new CashLedgerEntry
             {
                 Id = Guid.NewGuid(),
                 AccountId = reconciliation.AccountId,
-                Amount = reconciliation.Balance-account.Balance,
+                Amount = reconciliation.Balance - account.Balance,
                 Time = time,
                 TransactionId = t.Id,
                 Remark = t.Remark
@@ -679,46 +527,10 @@ namespace TgBot.SmartLedger
                     }
                     if (reversePayment)
                     {
-                        var entries = new List<CashLedgerEntry>();
-                        var sources = db.PaymentSources.Where(x => x.PaymentId == payment.Id);
-                        var paid = new HashSet<String>();
-                        ForeEachWorkItemInternal(db, work.PaymentId, x =>
+                        foreach(var tran in db.Transactions.AsNoTracking().Where(x=>x.Payment==payment.Id).OrderByDescending(t=>t.Time).ToList())
                         {
-                            if (!paid.Contains(x.UserId))
-                                paid.Add(x.UserId);
-                            return true;
-                        });
-                        var config = this.GetRuleData<SimplePaymentFlowConfiguration>();
-                        if (config == null)
-                            throw new UserFriendlyError("Configuration not set");
-                        var remark = $"Cancelation of payment for request: {payment.Note}({payment.Reference})";
-                        var t = new Transaction
-                        {
-                            Id = Guid.NewGuid(),
-                            AuditId = aid,
-                            PrevTransaction = e.TransactionHead,
-                            Remark = remark,
-                            Payment = payment.Id
-                        };
-                        foreach (var x in sources)
-                        {
-                            if (paid.Contains(config.GetPayer(x.CashAccountId, payment.IsDeposit)))
-                            {
-                                entries.Add(new CashLedgerEntry
-                                {
-                                    Id = Guid.NewGuid(),
-                                    AccountId = x.CashAccountId,
-                                    Amount = x.Amount,
-                                    Time = now,
-                                    TransactionId = t.Id,
-                                    Remark = remark,
-
-                                });
-                            }
-                        };
-
-                        TransactInternal(db, t, entries);
-
+                            ReverseTransaction(db, aid, now, tran.Id, $"Reverse of {payment.Reference}");
+                        }
                     }
                     if (completePayment != null)
                     {
@@ -730,6 +542,7 @@ namespace TgBot.SmartLedger
                             AuditId = aid,
                             PrevTransaction = e.TransactionHead,
                             Payment = payment.Id,
+                            Time=now,
                             Remark = $"Payment for request: {payment.Note}({payment.Reference})"
                         };
                         var entries = new List<CashLedgerEntry>();
@@ -744,6 +557,30 @@ namespace TgBot.SmartLedger
                                 TransactionId = t.Id,
                                 Remark = remark
                             });
+                            if (!payment.IsDeposit && s.PayerFee > 0)
+                            {
+                                entries.Add(new CashLedgerEntry
+                                {
+                                    Id = Guid.NewGuid(),
+                                    AccountId = s.CashAccountId,
+                                    Amount = -s.PayerFee,
+                                    Time = now,
+                                    TransactionId = t.Id,
+                                    Remark = $"Transaction fee ({payment.Reference})"
+                                });
+                            }
+                            if (payment.IsDeposit && s.PayeeFee > 0)
+                            {
+                                entries.Add(new CashLedgerEntry
+                                {
+                                    Id = Guid.NewGuid(),
+                                    AccountId = s.CashAccountId,
+                                    Amount = -s.PayeeFee,
+                                    Time = now,
+                                    TransactionId = t.Id,
+                                    Remark = $"Transaction fee ({payment.Reference})"
+                                });
+                            }
                             if (payment.IsTransferTransaction)
                             {
                                 entries.Add(new CashLedgerEntry
@@ -755,6 +592,19 @@ namespace TgBot.SmartLedger
                                     TransactionId = t.Id,
                                     Remark = remark
                                 });
+                                if (s.PayeeFee > 0)
+                                {
+                                    entries.Add(new CashLedgerEntry
+                                    {
+                                        Id = Guid.NewGuid(),
+                                        AccountId = payment.TransferTo.Value,
+                                        Amount = -s.PayeeFee,
+                                        Time = now,
+                                        TransactionId = t.Id,
+                                        Remark = "Transaction fee"
+                                    });
+                                }
+
                             }
                         }
 
@@ -765,7 +615,7 @@ namespace TgBot.SmartLedger
                     return w.Id;
                 });
         }
-        
+
         private static PaymentWorkItem AddPaymentWorkItemInternal(SmartLedgerDb db, string userId, PaymentWorkItem work,
             Guid aid, long now, Payment payment)
         {
@@ -784,7 +634,7 @@ namespace TgBot.SmartLedger
             db.WorkItems.Add(w);
             return w;
         }
-        
+
 
         public List<CashAccount> GetCashAccounts()
         {
@@ -802,16 +652,46 @@ namespace TgBot.SmartLedger
         {
             return db.CashAccounts.AsNoTracking().Where(x => x.Id == accountId).FirstOrDefault();
         }
-        void TransactInternal(SmartLedgerDb db, Transaction t, IEnumerable<CashLedgerEntry> entires)
+
+        Guid ReverseTransaction(SmartLedgerDb db, Guid auditId, long time, Guid transactionId, String remark)
+        {
+            var original = db.Transactions.AsNoTracking().First(x => x.Id == transactionId);
+            original.ReverseRole = TransactionReverseRole.Reversed;
+            db.Transactions.Update(original);
+            var reverse = new Transaction
+            {
+                Id = Guid.NewGuid(),
+                AuditId = auditId,
+                Payment = original.Payment,
+                Remark = remark,
+                Time = time,
+            };
+            var ledger = db.CashLedgerEntries.AsNoTracking()
+                .Where(x => x.TransactionId == transactionId)
+                .OrderBy(x => x.DisplayOrder)
+                .AsEnumerable().Select(x =>
+            {
+                x.Id = Guid.NewGuid();
+                x.Amount = -x.Amount;
+                x.Time = reverse.Time;
+                return x;
+            }).ToList();
+            TransactInternal(db, reverse, ledger, TransactionReverseRole.Reverse);
+            return reverse.Id;
+        }
+        void TransactInternal(SmartLedgerDb db, Transaction t, IEnumerable<CashLedgerEntry> entires, TransactionReverseRole reverseRole = TransactionReverseRole.None)
         {
             var e = GetEntityInternal(db);
+            t.ReverseRole = reverseRole;
             t.PrevTransaction = e.TransactionHead;
             e.TransactionHead = t.Id;
             db.Update(e);
 
             var balances = new Dictionary<Guid, CashAccount>();
+            var order = 0;
             foreach (var ent in entires)
             {
+                ent.DisplayOrder = order++;
                 CashAccount cash;
                 if (balances.ContainsKey(ent.AccountId))
                     cash = balances[ent.AccountId];
@@ -883,7 +763,7 @@ namespace TgBot.SmartLedger
             }
         }
 
-        internal List<Payment> GetOpenPayments(int index, int pageSize, out int totalN, bool orderAscending = false,string textFilter=null,bool activeOnly=true)
+        internal List<Payment> GetOpenPayments(int index, int pageSize, out int totalN, bool orderAscending = false, string textFilter = null, bool activeOnly = true)
         {
             int count = 0;
             var ret = DbRead(db =>
@@ -904,7 +784,7 @@ namespace TgBot.SmartLedger
                           filter = x => x.Note.Contains(textFilter);
                       }
                   }
-              
+
                   count = db.Payments.Where(filter).Count();
                   var res = db.Payments.Where(filter);
                   if (orderAscending)
@@ -950,7 +830,7 @@ namespace TgBot.SmartLedger
                     var t = db.Transactions.Where(x => x.Id == head).First();
                     if (toTime != null && t.Time >= toTime)
                         break;
-                    foreach (var le in db.CashLedgerEntries.Where(x => x.TransactionId == head && x.AccountId == accountId))
+                    foreach (var le in db.CashLedgerEntries.Where(x => x.TransactionId == head && x.AccountId == accountId).OrderByDescending(x => x.DisplayOrder))
                     {
 
                         if (fromTime != null && le.Time < fromTime)

@@ -3,15 +3,17 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TgBot.SmartLedger;
 
 namespace TgBot.Migrations.SmartLedgerDbMigrations
 {
     [DbContext(typeof(SmartLedgerDb))]
-    partial class SmartLedgerDbModelSnapshot : ModelSnapshot
+    [Migration("20231113121610_transaction_fee")]
+    partial class transaction_fee
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -178,9 +180,6 @@ namespace TgBot.Migrations.SmartLedgerDbMigrations
 
                     b.Property<long>("Amount")
                         .HasColumnType("bigint");
-
-                    b.Property<int>("DisplayOrder")
-                        .HasColumnType("int");
 
                     b.Property<string>("Remark")
                         .HasColumnType("nvarchar(max)");
@@ -395,9 +394,6 @@ namespace TgBot.Migrations.SmartLedgerDbMigrations
 
                     b.Property<string>("Remark")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("ReverseRole")
-                        .HasColumnType("int");
 
                     b.Property<long>("Time")
                         .HasColumnType("bigint");

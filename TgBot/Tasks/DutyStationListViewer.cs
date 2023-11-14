@@ -118,10 +118,10 @@ $@"Duty station name:{ds.Name}<pre>
                 foreach (var f in DutyStations)
                 {
                     var html = FormatDutyStation(service, f, $"{f.Code}: ");
-                    listHtml = listHtml == null ? html : (listHtml + "<pre>\n</pre>" + html);
+                    listHtml = listHtml == null ? html : (listHtml + "\n" + html);
                     n++;
                 }
-                listHtml += "<pre>\n</pre>Enter duty station code to see detail";
+                listHtml += "\nEnter duty station code to see detail";
                 await bot.SendTextMessageAsync(chatId,
                     text: listHtml,
                     parseMode: ParseMode.Html);

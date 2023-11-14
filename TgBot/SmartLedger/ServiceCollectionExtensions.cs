@@ -62,6 +62,13 @@ namespace TgBot.SmartLedger
             services.AddSmartLedger(configuration);
             return services.BuildServiceProvider();
         }
+        public static T GetServiceAssert<T>(this IServiceProvider services) where T : class
+        {
+            var ret = services.GetService<T>();
+            if (ret == null)
+                throw new InvalidOperationException($"Service {typeof(T)} couldn't be loaded");
+            return ret;
+        }
     }
 
 }

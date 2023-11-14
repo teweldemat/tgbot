@@ -3,6 +3,7 @@
 *@
 @model TgBot.Controllers.SmartLedgerController.LedgerViewModel
 @using TgBot;
+@using TgBot.SmartLedger;
 @{
 }
 <html>
@@ -14,6 +15,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
 
     <style>
+        .reversed {
+            background-color: #ffcccc; /* Light red for reversed transactions */
+        }
+
+        .reverse {
+            background-color: #ccffcc; /* Light green for reverse transactions */
+        }
     </style>
 </head>
 
@@ -49,7 +57,18 @@
                 <tbody>
                     @foreach (var le in @Model.Ledger)
                     {
-                        <tr>
+                        var rowClass = "";
+                        switch (le.ReverseRole)
+                        {
+                            case TransactionReverseRole.Reversed:
+                                rowClass = "reversed";
+                                break;
+                            case TransactionReverseRole.Reverse:
+                                rowClass = "reverse";
+                                break;
+                        }
+
+                        <tr class="@rowClass">
                             <td>@le.Date</td>
                             <td class="w3-right-align">@le.DebitAmount</td>
                             <td class="w3-right-align">@le.CreditAmount</td>
@@ -62,7 +81,6 @@
                             {
                                 <td><a href="@le.PrLink">@le.Remark</a></td>
                             }
-
                         </tr>
                     }
                 </tbody>

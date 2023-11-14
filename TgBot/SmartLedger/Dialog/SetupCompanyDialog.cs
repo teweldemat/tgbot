@@ -7,22 +7,22 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
-    public class SetupCompanyDialog<T> : FormDialog where T:TgBotDb
+    public class SetupCompanyDialog<T> : FormDialog where T : TgBotDb
     {
         const string FIELD_COMPANY_NAME = "CompanyName";
         TgBotService<T> service;
-        public SetupCompanyDialog(TgBotService<T>  service,ChatId chatId, User from) : base(chatId, from)
+        public SetupCompanyDialog(TgBotService<T> service, ChatId chatId, User from) : base(chatId, from)
         {
             this.service = service;
         }
-         public override void SetServices(IServiceProvider services)
+        public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<TgBotService<T>>();
+            service = services.GetService<TgBotService<T>>();
         }
         public override string FirstField => FIELD_COMPANY_NAME;
-        public static List<FormFieldChoiceItem> GetUserChoices(TgBotService<T> service,Func<MisUserProfile, bool> filter = null)
+        public static List<FormFieldChoiceItem> GetUserChoices(TgBotService<T> service, Func<MisUserProfile, bool> filter = null)
         {
             if (filter == null)
                 return service.GetAllUserProfiles().Select(
@@ -67,9 +67,9 @@ namespace TgBot.SmartLedger
                 }
                 service.CreateEntity(from.Id.ToString(), (string)FieldData[FIELD_COMPANY_NAME].Val(),
                     null, null);
-                await bot.SendTextMessageAsync( chatId,"Congradulations! Your company is registered."
-                    +$"\nNow send the telegram bot @{TGBot.meName} to relevant users"
-                    , cancellationToken:cancellationToken);
+                await bot.SendTextMessageAsync(chatId, "Congradulations! Your company is registered."
+                    + $"\nNow send the telegram bot @{TGBot.meName} to relevant users"
+                    , cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {

@@ -28,13 +28,13 @@
         <tr><td>Reason:</td><td>@Model.Payment.Note</td></tr>
         @switch (Model.Payment.PaymentType)
         {
-            case TgBot.SmartLedger.PaymentType.Payment:
+            case TgBot.SmartLedger.Dialog.PaymentType.Payment:
                 <tr><td>Pay to:</td><td>@Model.Payment.ToPayTo</td></tr>
                 break;
-            case TgBot.SmartLedger.PaymentType.Deposit:
+            case TgBot.SmartLedger.Dialog.PaymentType.Deposit:
                 <tr><td>Receive from:</td><td>@Model.Payment.ToPayTo</td></tr>
                 break;
-            case TgBot.SmartLedger.PaymentType.Transfer:
+            case TgBot.SmartLedger.Dialog.PaymentType.Transfer:
                 <tr><td>Transfer to:</td><td>@(Model.TransferAccount==null?"Non set":Model.TransferAccount.Name)</td></tr>
                 break;
         }

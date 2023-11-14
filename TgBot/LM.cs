@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using TgBot.SmartLedger;
+using TgBot.SmartLedger.Dialog;
 
 namespace TgBot
 {

@@ -9,34 +9,46 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TgBot.TgDb;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
 
     public class AccountDialog : FormDialog
     {
-        const String FIELD_NOTE = "Note";
+        const string FIELD_NOTE = "Note";
         const string FIELD_ATTACHMENT_PREFIX = "Attachment";
         const string MORE_ATTACHMENT_PREFIX = "More Attachment";
 
-        public Payment payment { get; set; }
-        public override string FirstField => FIELD_NOTE;
+        //persistent state
+        public Guid PaymentId { get; set; }
+
+        //transient
         TgDbService tgService;
         SmartLedgerService service;
+        Payment payment { get; set; }
         public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<SmartLedgerService>();
-            this.tgService = services.GetService<TgDbService>();
+            service = services.GetService<SmartLedgerService>();
+            tgService = services.GetService<TgDbService>();
+            init();
         }
+        void init()
+        {
+            payment = service.GetPayment(this.PaymentId);
+            var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
+            if (config == null)
+                throw new UserFriendlyError("Configuration not set");
 
+
+        }
         public AccountDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(chatId, from)
         {
             this.tgService = tgService;
             this.service = service;
-            this.payment = service.GetPayment(paymentId);
-            var config = service.GetRuleData<SimplePaymentFlowConfiguration>();
-            if (config == null)
-                throw new UserFriendlyError("Configuration not set");
+            this.PaymentId = paymentId;
+            if (this.service != null)
+                init();
         }
+        public override string FirstField => FIELD_NOTE;
 
         public override FormDialogField GetFieldDef(string key)
         {
@@ -82,16 +94,16 @@ namespace TgBot.SmartLedger
             using (var serviceProvider = ServiceCollectionExtensions.CreateScope())
             {
                 var service = serviceProvider.GetService<SmartLedgerService>();
-                var sources = service.GetPaymentSources(this.payment.Id);
+                var sources = service.GetPaymentSources(payment.Id);
 
                 service.AddPaymentWorkItem(from.Id.ToString(),
                     new PaymentWorkItem
                     {
-                        PaymentId = this.payment.Id,
+                        PaymentId = payment.Id,
                         WorkType = PaymentWorkItem.WORK_TYPE_ACCOUNT,
-                        Note = (String)FieldData[FIELD_NOTE].Val(),
+                        Note = (string)FieldData[FIELD_NOTE].Val(),
                     },
-                    this.Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
+                    Pictures(FIELD_ATTACHMENT_PREFIX).Select(x => new WorkItemPicture
                     {
                         Image = x.Image,
                         ImgeMime = x.ImageMime,
@@ -112,7 +124,7 @@ namespace TgBot.SmartLedger
                     var prof = service.GetUserProfile(from.Id.ToString());
 
                     //notify group
-                    await SmartLedgerBot.NotifyGroups(bot,tgService,  $"{prof.FullName} completed the accounting for the request "
+                    await SmartLedgerBot.NotifyGroups(bot, tgService, $"{prof.FullName} completed the accounting for the request "
                         + $"{SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}", true, cancellationToken);
 
                     //notify owner
@@ -130,7 +142,7 @@ namespace TgBot.SmartLedger
                         var user = new User();
                         user.Id = long.Parse(next);
                         user.FirstName = "Unknown";
-                        await TGBot.PushDialog(next, new PaymentDetailDialog(service,tgService, next, user, payment.Id), cancellationToken);
+                        await TGBot.PushDialog(next, new PaymentDetailDialog(service, tgService, next, user, payment.Id), cancellationToken);
                     }
                 }
                 catch (Exception ex)
