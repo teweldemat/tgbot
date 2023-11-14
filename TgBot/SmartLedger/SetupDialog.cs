@@ -48,7 +48,7 @@ namespace TgBot.SmartLedger
                         Prompt = "Whom would you like to check payments?",
                         FieldType = FieldType.Choices,
                         NextField = d => string.IsNullOrEmpty(selectedFieldToUpdate) ? Task.FromResult(FIELD_APPROVE_ONE) : Task.FromResult<string>(null),
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        Choices = SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>.GetUserChoices(service)
                     };
                 case FIELD_APPROVE_ONE:
                     return new FormDialogField
@@ -56,7 +56,7 @@ namespace TgBot.SmartLedger
                         Prompt = "Whom do you want to approve payments?",
                         FieldType = FieldType.Choices,
                         NextField = d => string.IsNullOrEmpty(selectedFieldToUpdate) ? Task.FromResult(FIELD_ACCOUNTANT) : Task.FromResult<string>(null),
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        Choices = SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>.GetUserChoices(service)
                     };
                 case FIELD_ACCOUNTANT:
                     return new FormDialogField
@@ -64,7 +64,7 @@ namespace TgBot.SmartLedger
                         Prompt = "Who is the accountant?",
                         FieldType = FieldType.Choices,
                         NextField = null, // This is the last field, so it's always null
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        Choices = SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>.GetUserChoices(service)
                     };
             }
             return null;

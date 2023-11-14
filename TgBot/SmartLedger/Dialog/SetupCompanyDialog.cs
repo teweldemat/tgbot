@@ -9,17 +9,17 @@ using Telegram.Bot.Types;
 
 namespace TgBot.SmartLedger.Dialog
 {
-    public class SetupCompanyDialog<T> : FormDialog where T : TgBotDb
+    public class SetupCompanyDialog<T,TS> : FormDialog where T : TgBotDb where TS: TgBotService<T>
     {
         const string FIELD_COMPANY_NAME = "CompanyName";
-        TgBotService<T> service;
-        public SetupCompanyDialog(TgBotService<T> service, ChatId chatId, User from) : base(chatId, from)
+        TS service;
+        public SetupCompanyDialog(TS service, ChatId chatId, User from) : base(chatId, from)
         {
             this.service = service;
         }
         public override void SetServices(IServiceProvider services)
         {
-            service = services.GetService<TgBotService<T>>();
+            service = services.GetService<TS>();
         }
         public override string FirstField => FIELD_COMPANY_NAME;
         public static List<FormFieldChoiceItem> GetUserChoices(TgBotService<T> service, Func<MisUserProfile, bool> filter = null)

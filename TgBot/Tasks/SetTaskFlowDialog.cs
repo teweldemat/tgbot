@@ -38,7 +38,7 @@ namespace TgBot.Tasks
                         Prompt = "Whom would you like to check HR requests?",
                         FieldType = FieldType.Choices,
                         NextField = d => Task.FromResult(FIELD_HR_MANGER),
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        Choices = SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>.GetUserChoices(service)
                     };
                 case FIELD_HR_MANGER:
                     return new FormDialogField
@@ -46,7 +46,7 @@ namespace TgBot.Tasks
                         Prompt = "Whom do you want to approve HR requests?",
                         FieldType = FieldType.Choices,
                         NextField = d => Task.FromResult(FIELD_HR_BOOKKEEPER),
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        Choices = SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>.GetUserChoices(service)
                     };
                 case FIELD_HR_BOOKKEEPER:
                     return new FormDialogField
@@ -54,7 +54,7 @@ namespace TgBot.Tasks
                         Prompt = "Whom do the book keeping for the HR requests?",
                         FieldType = FieldType.Choices,
                         NextField = null,
-                        Choices = SetupCompanyDialog<SmartLedgerDb>.GetUserChoices(service)
+                        Choices = SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>.GetUserChoices(service)
                     };
             }
             return null;

@@ -60,7 +60,7 @@ namespace TgBot.SmartLedger
                     await bot.SendTextMessageAsync(
                     chatId: chatId,
                     text: "Welcome.");
-                    await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog<SmartLedgerDb>(service, chatId, from), cancellationToken);
+                    await TGBot.PushDialog(from.Id.ToString(), new SetupCompanyDialog<SmartLedgerDb, SmartLedgerService>(service, chatId, from), cancellationToken);
                     return true;
                 }
 
