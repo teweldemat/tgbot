@@ -1,23 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Data.Common;
 
 namespace TgBot.SmartLedger
 {
-    public class TgBotDb:DbContext
-    {
-        public TgBotDb(DbContextOptions<TgBotDb> options) : base(options)
-        {
-
-        }
-        public DbSet<CashEntity> CashEntities { get; set; }
-        public DbSet<AuditRecord> AuditRecords { get; set; }
-        public DbSet<MisDelta> DeltaRecords { get; set; }
-        public DbSet<MisUserProfile> MisUserProfiles { get; set; }
-        public DbSet<Workflow.WorkFlowInfo> WorkFlows { get; set; }
-        public DbSet<Workflow.WorkItem> WorkFlowItems { get; set; }
-    }
     public class SmartLedgerDb : TgBotDb
     {
-        public SmartLedgerDb(DbContextOptions<TgBotDb> options) : base(options)
+        public SmartLedgerDb(DbConnection con) : base(con)
         {
 
         }

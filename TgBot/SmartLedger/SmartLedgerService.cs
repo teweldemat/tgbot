@@ -682,10 +682,6 @@ namespace TgBot.SmartLedger
         void TransactInternal(SmartLedgerDb db, Transaction t, IEnumerable<CashLedgerEntry> entires, TransactionReverseRole reverseRole = TransactionReverseRole.None)
         {
             var e = GetEntityInternal(db);
-            t.ReverseRole = reverseRole;
-            t.PrevTransaction = e.TransactionHead;
-            e.TransactionHead = t.Id;
-            db.Update(e);
 
             var balances = new Dictionary<Guid, CashAccount>();
             var order = 0;
@@ -710,6 +706,12 @@ namespace TgBot.SmartLedger
             foreach (var b in balances)
                 db.Update(b.Value);
             db.Transactions.Add(t);
+
+            t.ReverseRole = reverseRole;
+            t.PrevTransaction = e.TransactionHead;
+            e.TransactionHead = t.Id;
+            db.Update(e);
+
             db.SaveChanges();
         }
 

@@ -1,11 +1,12 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Data.Common;
 using TgBot.SmartLedger;
 
 namespace TgBot.Exchange
 {
     public class ExchangeDb:TgBotDb
     {
-        public ExchangeDb(DbContextOptions<TgBotDb> options) : base(options)
+        public ExchangeDb(DbConnection con) : base(con)
         {
 
         }
