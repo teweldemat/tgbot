@@ -17,6 +17,8 @@ namespace TgBot.SmartLedger.Dialog
         const string MORE_ATTACHMENT_PREFIX = "More Attachment";
         const string FIELD_PAYER_FEE = "PayerFee_";
         const string FIELD_PAYEE_FEE = "PayeeFee_";
+
+        const double MAX_FEE_PROPORTION = 0.1;
         public Guid PaymentId { get; set; } 
         Payment payment { get; set; }
         SmartLedgerService service;
@@ -74,9 +76,21 @@ namespace TgBot.SmartLedger.Dialog
                     ParseFunction = (bot, t, c) =>
                     {
                         if (double.TryParse(t, out var d) && d >= 0)
-                            return Task.FromResult(new ParseResult { Data = IntData.toIntMoney(d) });
+                        {
+                            var feeAmount = IntData.toIntMoney(d);
+                            if (feeAmount <= MAX_FEE_PROPORTION * source.Amount)
+                            {
+                                return Task.FromResult(new ParseResult { Data = feeAmount });
+                            }
+                            else
+                            {
+                                return Task.FromResult(new ParseResult { Error = "Fee cannot exceed 10% of the payment amount" });
+                            }
+                        }
                         else
+                        {
                             return Task.FromResult(new ParseResult { Error = "Invalid fee amount" });
+                        }
                     }
                 };
             }
