@@ -8,7 +8,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace TgBot.SmartLedger
+namespace TgBot.SmartLedger.Dialog
 {
     class PaymentListViewer : BotDialogBase
     {
@@ -20,7 +20,7 @@ namespace TgBot.SmartLedger
         public int buttonMsgId;
         public string prevText;
         public bool ActiveOnly;
-        public String filterText = null;
+        public string filterText = null;
         SmartLedgerService service;
 
         public PaymentListViewer(SmartLedgerService service, ChatId chatId, User user
@@ -29,18 +29,18 @@ namespace TgBot.SmartLedger
         {
             this.chatId = chatId;
             this.user = user;
-            this.ActiveOnly = activeOnly;
+            ActiveOnly = activeOnly;
             this.filterText = filterText;
             this.service = service;
 
         }
         public override void SetServices(IServiceProvider services)
         {
-            this.service = services.GetService<SmartLedgerService>();
+            service = services.GetService<SmartLedgerService>();
         }
-        public static string FormatPayment(SmartLedgerService coreService, Payment payment, String numLabel)
+        public static string FormatPayment(SmartLedgerService coreService, Payment payment, string numLabel)
         {
-            String name = coreService.GetUserProfile(payment.Creator).FullName;
+            string name = coreService.GetUserProfile(payment.Creator).FullName;
 
             var html = $"{numLabel}";
             if (payment.IsDeposit)
@@ -53,7 +53,7 @@ namespace TgBot.SmartLedger
         }
         async Task<bool> ShowPageAsync(ITelegramBotClient bot, int index, CancellationToken cancelationToken)
         {
-            var payments = service.GetOpenPayments(index, CONTLIST_PAGE_SIZE, out var totalN, textFilter: this.filterText);
+            var payments = service.GetOpenPayments(index, CONTLIST_PAGE_SIZE, out var totalN, textFilter: filterText);
             if (payments.Count == 0)
             {
                 await bot.SendTextMessageAsync(chatId, "No open request");
@@ -61,21 +61,21 @@ namespace TgBot.SmartLedger
             else
             {
                 var n = 1;
-                String listHtml = null;
+                string listHtml = null;
                 foreach (var f in payments)
                 {
                     var html = FormatPayment(service, f, $"{index + n}. ");
-                    listHtml = listHtml == null ? html : (listHtml + "\n" + html);
+                    listHtml = listHtml == null ? html : listHtml + "\n" + html;
                     n++;
                 }
                 listHtml += $"\n<a href=\"{SmartLedgerBot.WebLinkBaseUrl}/sl/summary\">[Full Summary]</a>";
                 if (index > 0)
                 {
-                    await bot.EditMessageReplyMarkupAsync(chatId, this.buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));
+                    await bot.EditMessageReplyMarkupAsync(chatId, buttonMsgId, new InlineKeyboardMarkup(new InlineKeyboardButton[0]));
                 }
                 if (index + CONTLIST_PAGE_SIZE < totalN)
                 {
-                    this.pageIndex = index + CONTLIST_PAGE_SIZE;
+                    pageIndex = index + CONTLIST_PAGE_SIZE;
                     var buttons = new InlineKeyboardButton[][]
                         {
                         new[] { InlineKeyboardButton.WithCallbackData(Program.lm.Show_more_n_records(Math.Min(CONTLIST_PAGE_SIZE, totalN - (index + CONTLIST_PAGE_SIZE))), PAGE_PREFIX + pageIndex), }
@@ -87,8 +87,8 @@ namespace TgBot.SmartLedger
                         parseMode: ParseMode.Html,
                         replyMarkup: replyKeyboardMarkup
                     );
-                    this.buttonMsgId = msg.MessageId;
-                    this.prevText = listHtml;
+                    buttonMsgId = msg.MessageId;
+                    prevText = listHtml;
                 }
                 else
                 {

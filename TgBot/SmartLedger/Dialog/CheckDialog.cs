@@ -16,20 +16,14 @@ namespace TgBot.SmartLedger.Dialog
         protected override int WorkType => PaymentWorkItem.WORK_TYPE_CANCELED;
 
         protected override IEnumerable<string> NextStage => null;
-        SmartLedgerService service;
 
         public CheckRejectDialog(SmartLedgerService service, TgDbService tgService, ChatId chatId, User from, Guid paymentId) : base(service, tgService, chatId, from, paymentId)
         {
             PaymentId = paymentId;
-            this.service = service;
         }
         protected override string GroupNotification(string rejecterName, Payment payment)
         {
             return $"{rejecterName} checked and rejeced request {SmartLedgerBot.PaymentLink(payment.Id, payment.Reference)}";
-        }
-        public override void SetServices(IServiceProvider services)
-        {
-            service = services.GetService<SmartLedgerService>();
         }
         protected override string OwnerNotification(string rejecterName, Payment payment)
         {

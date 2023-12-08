@@ -773,13 +773,17 @@ namespace TgBot.SmartLedger
                   Func<Payment, bool> filter;
 
                   if (textFilter == null)
-                      filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED;
+                      filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE 
+                      && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED
+                      && x.HeadType != PaymentWorkItem.WORK_TYPE_VOID;
                   else
                   {
                       if (activeOnly)
                       {
-                          filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED
-                              && x.Note.Contains(textFilter);
+                          filter = x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE 
+                          && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED
+                            && x.HeadType != PaymentWorkItem.WORK_TYPE_VOID
+                          && x.Note.Contains(textFilter);
                       }
                       else
                       {
