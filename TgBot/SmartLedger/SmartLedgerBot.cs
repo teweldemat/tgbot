@@ -279,6 +279,9 @@ namespace TgBot.SmartLedger
                             else
                                 text += $"\n<b>Payment Declined By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
                             break;
+                        case PaymentWorkItem.WORK_TYPE_REOPEN:
+                            text += $"\n<b>Reopend By:</b> {userState.FullName} on {IntData.toDateString(w.Time, "MMM dd,yy")}";
+                            break;
                     }
                     text += $"\n<b>Remark:</b> {w.Note}";
                 }

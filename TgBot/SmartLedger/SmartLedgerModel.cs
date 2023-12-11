@@ -266,6 +266,7 @@ namespace TgBot.SmartLedger
         public const int WORK_TYPE_SEND_BACK_TO_PAYMENT = 12;
         public const int WORK_TYPE_SEND_BACK_TO_ACCOUNTING = 13;
         public const int WORK_TYPE_VOID = 15;
+        public const int WORK_TYPE_REOPEN = 16;
 
         public Guid PaymentId {get;set;}
         public static String StatusString(int workType, Payment payment)
@@ -300,6 +301,8 @@ namespace TgBot.SmartLedger
                     return "Sent back to accounting, Waiting for Payment to be Redone";
                 case PaymentWorkItem.WORK_TYPE_VOID:
                     return "Payment voided";
+                case PaymentWorkItem.WORK_TYPE_REOPEN:
+                    return "Payment re-opened";
 
             }
             return "";
@@ -348,6 +351,8 @@ namespace TgBot.SmartLedger
                     return "Paid";
                 case PaymentWorkItem.WORK_TYPE_VOID:
                     return "Payment voided";
+                case PaymentWorkItem.WORK_TYPE_REOPEN:
+                    return "Payent Reopened";
 
             }
             return "Unknown Action Done";

@@ -27,6 +27,8 @@ namespace TgBot.SmartLedger.Dialog
         const string COMMAND_RESTART = "Restart";
         const string COMMAND_UPDATE_REQUEST = "UpdateRequest";
         const string COMMAND_VOID_PAYMENT = "VoidPayment";
+        const string COMMAND_REOPEN = "Reopen";
+
 
         public Guid PaymentId { get; set; }
 
@@ -181,6 +183,7 @@ namespace TgBot.SmartLedger.Dialog
                     && !paymentStage
                     && from.Id.ToString().Equals(config.Accountant)
                     || w.WorkType == PaymentWorkItem.WORK_TYPE_SEND_BACK_TO_ACCOUNTING
+                    || w.WorkType == PaymentWorkItem.WORK_TYPE_REOPEN
                     )
                 {
                     choices.Add(new FormFieldChoiceItem("Account", COMMAND_ACCOUNT));
@@ -190,6 +193,12 @@ namespace TgBot.SmartLedger.Dialog
                     && e.Owner==this.from.Id.ToString()) //void avalable only for owner
                 {
                     choices.Add(new FormFieldChoiceItem(COMMAND_VOID_PAYMENT, "Void Payment"));
+                }
+                
+                // Reopen (available only for owner of closed payments)
+                if (w.WorkType == PaymentWorkItem.WORK_TYPE_CLOSE && e.Owner == this.from.Id.ToString())
+                {
+                    choices.Add(new FormFieldChoiceItem(COMMAND_REOPEN, "Reopen Payment"));
                 }
             }
             return new FormDialogField
@@ -245,6 +254,9 @@ namespace TgBot.SmartLedger.Dialog
                     break;
                 case COMMAND_VOID_PAYMENT:
                     await TGBot.PushDialog(from.Id.ToString(), new VoidPaymentDialog(service, tgService, chatId, from, PaymentId), cancellationToken);
+                    break;
+                case COMMAND_REOPEN:
+                    await TGBot.PushDialog(from.Id.ToString(), new ReopenPaymentDialog(service, tgService, chatId, from, PaymentId), cancellationToken);
                     break;
             }
             return DialogResult.Terminated;
