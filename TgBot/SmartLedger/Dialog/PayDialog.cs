@@ -78,7 +78,7 @@ namespace TgBot.SmartLedger.Dialog
                         if (double.TryParse(t, out var d) && d >= 0)
                         {
                             var feeAmount = IntData.toIntMoney(d);
-                            if (feeAmount <= MAX_FEE_PROPORTION * Math.Abs(source.PayeeFee))
+                            if (feeAmount <= MAX_FEE_PROPORTION * Math.Abs(source.Amount))
                             {
                                 return Task.FromResult(new ParseResult { Data = feeAmount });
                             }
