@@ -70,7 +70,7 @@ namespace TgBot
             BotAdmin = Program.GetBotConfig("Admin");
             BotToken = Program.GetBotConfig("BotToken");
             Bot = new TelegramBotClient(BotToken);
-            Console.WriteLine($"Trying to connect bot @{BotToken}");
+            Console.WriteLine("Trying to connect bot");
             var me = await Bot.GetMeAsync();
             Console.Title = me.Username;
             meName = me.Username;
