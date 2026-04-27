@@ -35,7 +35,7 @@ namespace TgBot.WeBirrAdmin
         public DbSet<WbaMerchantUser> MerchantUsers { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(Program.GetConnectionString("TGBot"));
+            optionsBuilder.UseNpgsql(Program.GetConnectionString("TGBot"));
         }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

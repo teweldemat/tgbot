@@ -19,7 +19,7 @@ namespace TgBot.TgDb
         public DbSet<WFDialogItem> DialogItems { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(_con);
+            optionsBuilder.UseNpgsql(_con);
         }
 
     }

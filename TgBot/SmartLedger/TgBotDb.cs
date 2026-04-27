@@ -3,10 +3,10 @@ using System.Data.Common;
 
 namespace TgBot.SmartLedger
 {
-    public class TgBotDb:DbContext
+    public abstract class TgBotDb:DbContext
     {
-        DbConnection _con;
-        public TgBotDb(DbConnection con)
+        private readonly DbConnection _con;
+        protected TgBotDb(DbConnection con)
         {
             this._con = con;
         }
@@ -18,7 +18,7 @@ namespace TgBot.SmartLedger
         public DbSet<Workflow.WorkItem> WorkFlowItems { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(_con);
+            optionsBuilder.UseNpgsql(_con);
         }
 
     }
