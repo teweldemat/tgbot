@@ -82,12 +82,17 @@ sudo -u postgres psql -d intaps_pay -c 'select count(*) from "Payment";'
 - Data was copied from the old SQL Server `IntapsPay` database on
   `app.intaps.com` into PostgreSQL `intaps_pay` on `rc.intaps.com`.
 - `WFDialogStack` was intentionally cleared after migration per operator
-  request.
+  request. The live bot may create new dialog rows after startup.
 - Smoke-test counts after migration:
   - `Payment`: 974
   - `TgUserState`: 66
   - `AuditRecord`: 25086
   - `WFDialogStack`: 0
+- Backup on the previous host:
+  `/var/opt/mssql/backups/IntapsPay_20260427102155.bak`
+  - Size: 2.4 GB
+  - SHA-256:
+    `70a14204a3a923406647a77a8c7c12872cd602381d672f830914ba2646fe164e`
 
 ### Previous host
 
@@ -95,12 +100,14 @@ sudo -u postgres psql -d intaps_pay -c 'select count(*) from "Payment";'
 - Service: `intapspayment.service`
 - Previous app path: `/var/IntapsPay/App/TgBotApp.dll`
 - Previous database: SQL Server database `IntapsPay`
-- Status after migration: inactive, intentionally stopped to avoid duplicate
-  Telegram bot token polling.
+- Status after migration:
+  - `intapspayment.service` removed from systemd.
+  - `/var/IntapsPay/App` removed.
+  - SQL Server database files under `/var/IntapsPay/DB` retained because
+    `intapstask.service` still points at the same `IntapsPay` database.
 
 Other services observed on the previous host and not moved as part of this
 payment bot migration:
 
 - `tlt_pay.service`
 - `intapstask.service`
-
