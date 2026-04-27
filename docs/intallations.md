@@ -93,6 +93,11 @@ sudo -u postgres psql -d intaps_pay -c 'select count(*) from "Payment";'
   - Size: 2.4 GB
   - SHA-256:
     `70a14204a3a923406647a77a8c7c12872cd602381d672f830914ba2646fe164e`
+- Local backup for the retired TLT payment bot:
+  `~/intaps/important-backups/TLTPay_20260427104325.bak`
+  - Size: 303 MB
+  - SHA-256:
+    `432761a1336d9b1f083391afc7811aa4226285c3bc7936e41b18ca58046b660c`
 
 ### Previous host
 
@@ -108,8 +113,9 @@ sudo -u postgres psql -d intaps_pay -c 'select count(*) from "Payment";'
   - `/var/IntapsTask` removed.
   - SQL Server database `IntapsPay` dropped after backup verification.
   - SQL Server database files under `/var/IntapsPay/DB` removed.
-
-Other services observed on the previous host and not moved as part of this
-payment bot migration:
-
-- `tlt_pay.service`
+  - `tlt_pay.service` removed from systemd.
+  - `/usr/bin/tlt/paybot` removed.
+  - SQL Server database `TLTPay` backed up locally, dropped, and removed from
+    the server.
+  - SQL Server itself was left running because other hosted services still have
+    active connections and systemd references to it.
