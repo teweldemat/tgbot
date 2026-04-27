@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TgBot.TgDb;
@@ -9,9 +10,10 @@ using TgBot.TgDb;
 namespace TgBot.MigrationsPostgres.TgBotContext
 {
     [DbContext(typeof(TgBotDbContext))]
-    partial class TgBotDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260102013949_InitPostgres")]
+    partial class InitPostgres
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

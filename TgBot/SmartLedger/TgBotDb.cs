@@ -18,7 +18,7 @@ namespace TgBot.SmartLedger
         public DbSet<Workflow.WorkItem> WorkFlowItems { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(_con);
+            optionsBuilder.UseNpgsql(_con);
         }
 
     }

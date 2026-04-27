@@ -32,4 +32,13 @@ msbuild.wrn
 
 # Visual Studio 2015
 .vs/
+
+# Local application configuration with secrets
 /TgBot/appsettings.json
+
+# Keep EF Core tool manifests and PostgreSQL migrations trackable.
+# These are required to recreate/manage the branch migrations.
+!.config/
+!.config/dotnet-tools.json
+!TgBot/MigrationsPostgres/
+!TgBot/MigrationsPostgres/**

@@ -61,7 +61,7 @@ namespace TgBot.WeFund
         }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(Program.GetConnectionString("TGBot"));
+            optionsBuilder.UseNpgsql(Program.GetConnectionString("TGBot"));
         }
 
     }

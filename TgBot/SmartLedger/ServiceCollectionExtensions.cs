@@ -10,7 +10,7 @@ using TgBot.SocialLedger;
 using TgBot.TgDb;
 using TgBot.WeTicket;
 using TgBot.Tasks;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using System.Data.Common;
 
 namespace TgBot.SmartLedger
@@ -20,19 +20,19 @@ namespace TgBot.SmartLedger
         public static IServiceCollection AddSmartLedger(this IServiceCollection services, IConfiguration configuration)
         {
             /*services.AddDbContext<WeTicketDb>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("TGBot"))
+                options.UseNpgsql(configuration.GetConnectionString("TGBot"))
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
             services.AddDbContext<TgBotDbContext>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("TGBot"))
+                options.UseNpgsql(configuration.GetConnectionString("TGBot"))
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
             services.AddDbContext<SmartLedgerDb>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("TGBot"))
+                options.UseNpgsql(configuration.GetConnectionString("TGBot"))
                        .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
             services.AddDbContext<SocialLedgerDb>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("TGBot"))
+                options.UseNpgsql(configuration.GetConnectionString("TGBot"))
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
 
@@ -41,18 +41,20 @@ namespace TgBot.SmartLedger
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
             services.AddDbContext<TgBotDb>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("TGBot"))
+                options.UseNpgsql(configuration.GetConnectionString("TGBot"))
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
             */
-            services.AddDbContext<WeTicketDb>();
+            services.AddDbContext<WeTicketDb>(options =>
+                options.UseNpgsql(configuration.GetConnectionString("TGBot")));
             services.AddDbContext<TgBotDb>();
-            services.AddDbContext<SocialLedgerDb>();
+            services.AddDbContext<SocialLedgerDb>(options =>
+                options.UseNpgsql(configuration.GetConnectionString("TGBot")));
             services.AddDbContext<SmartLedgerDb>();
             services.AddDbContext<TgBotDbContext>();
             services.AddScoped<DbConnection>(serviceProvider =>
             {
                 var connectionString = configuration.GetConnectionString("TGBot");
-                return new SqlConnection(connectionString);
+                return new NpgsqlConnection(connectionString);
             });
 
             services.AddScoped<TgDbService>();

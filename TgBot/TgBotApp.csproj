@@ -16,6 +16,7 @@
     <Compile Remove="TgBot\**" />
     <Compile Remove="WeBirrAdmin\**" />
     <Compile Remove="WeFund\**" />
+    <Compile Remove="Migrations\**" />
     <Content Remove="TrafficTickDiag\**" />
     <Content Remove="TTDB\**" />
     <Content Remove="TgBot\**" />

@@ -185,7 +185,7 @@ namespace TgBot.SmartLedger
         [Key]
         public Guid EntityId { get; set; }
         public String RuleType { get; set; }
-        [Column(TypeName = "ntext")]
+        [Column(TypeName = "text")]
         public String Rule { get; set; }
         public Guid AuditId { get; set; }
     }
@@ -211,7 +211,7 @@ namespace TgBot.SmartLedger
         public String Note { get; set; }
         public Guid AuditId { get; set; }
         public int WorkType { get; set; }
-        [Column(TypeName = "ntext")]
+        [Column(TypeName = "text")]
         public String Data { get; set; }
     }
     [Table("Payment")]

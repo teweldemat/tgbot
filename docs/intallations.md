@@ -60,10 +60,9 @@ This document captures the current deployment details observed on `tewelde@wsis2
 
 ### /var/IntapsPay/App/appsettings.json
 - ConnectionStrings:TGBot
-  - server=64.225.3.202
-  - database=IntapsPay
-  - Trusted_Connection=false
-  - User Id=IntapsPayment
+  - Host=64.225.3.202
+  - Database=IntapsPay
+  - Username=IntapsPayment
   - Password=KkVX9YZJ
 - WeBirrCheckOut
   - EndPoint=https://api.webirr.com/einvoice/api/
@@ -82,10 +81,9 @@ This document captures the current deployment details observed on `tewelde@wsis2
 
 ### /usr/bin/tlt/paybot/app/appsettings.json
 - ConnectionStrings:TGBot
-  - server=64.225.3.202
-  - database=TLTPay
-  - Trusted_Connection=false
-  - User Id=IntapsPayment
+  - Host=64.225.3.202
+  - Database=TLTPay
+  - Username=IntapsPayment
   - Password=KkVX9YZJ
 - WeBirrCheckOut
   - EndPoint=https://api.webirr.com/einvoice/api/
@@ -104,10 +102,9 @@ This document captures the current deployment details observed on `tewelde@wsis2
 
 ### /var/IntapsTask/bin/appsettings.json
 - ConnectionStrings:TGBot
-  - server=64.225.3.202
-  - database=IntapsPay
-  - Trusted_Connection=false
-  - User Id=IntapsPayment
+  - Host=64.225.3.202
+  - Database=IntapsPay
+  - Username=IntapsPayment
   - Password=KkVX9YZJ
 - WeBirrCheckOut
   - EndPoint=https://api.webirr.com/einvoice/api/
