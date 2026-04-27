@@ -18,7 +18,7 @@ namespace TestTgBot
         public void TestFull()
         {
             var service = ServiceCollectionExtensions.CreateScope();
-            var db=service.GetService<TgBotDb>();
+            var db=service.GetService<SmartLedgerDb>();
         }
     }
 }

@@ -40,13 +40,9 @@ namespace TgBot.SmartLedger
                 options.UseNpgsql(configuration.GetConnectionString("Exchange"))
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
-            services.AddDbContext<TgBotDb>(options =>
-                options.UseNpgsql(configuration.GetConnectionString("TGBot"))
-                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
             */
             services.AddDbContext<WeTicketDb>(options =>
                 options.UseNpgsql(configuration.GetConnectionString("TGBot")));
-            services.AddDbContext<TgBotDb>();
             services.AddDbContext<SocialLedgerDb>(options =>
                 options.UseNpgsql(configuration.GetConnectionString("TGBot")));
             services.AddDbContext<SmartLedgerDb>();
