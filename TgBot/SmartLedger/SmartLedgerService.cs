@@ -806,6 +806,88 @@ namespace TgBot.SmartLedger
             totalN = count;
             return ret;
         }
+        internal List<SmartLedgerActionItem> GetMyActionItems(string userId, int index, int pageSize, out int totalN)
+        {
+            var config = GetRuleData<SimplePaymentFlowConfiguration>();
+            var entity = GetEntity();
+            var ret = DbRead(db =>
+            {
+                var items = new List<SmartLedgerActionItem>();
+                var payments = db.Payments
+                    .Where(x => x.HeadType != PaymentWorkItem.WORK_TYPE_CLOSE
+                        && x.HeadType != PaymentWorkItem.WORK_TYPE_CANCELED
+                        && x.HeadType != PaymentWorkItem.WORK_TYPE_VOID)
+                    .OrderByDescending(x => x.HeadTime ?? x.Time)
+                    .ToList();
+
+                foreach (var payment in payments)
+                {
+                    if (payment.WorkItemHead == null)
+                        continue;
+
+                    var head = db.WorkItems.AsNoTracking().FirstOrDefault(x => x.Id == payment.WorkItemHead.Value);
+                    var sources = db.PaymentSources.AsNoTracking().Where(x => x.PaymentId == payment.Id).ToList();
+                    var paidUsers = db.WorkItems.AsNoTracking()
+                        .Where(x => x.PaymentId == payment.Id && x.WorkType == PaymentWorkItem.WORK_TYPE_PAY)
+                        .Select(x => x.UserId)
+                        .Distinct()
+                        .ToList();
+                    var actions = SmartLedgerActionPolicy.GetPaymentActions(userId, payment, head, config, sources, paidUsers);
+                    if (actions.Count == 0)
+                        continue;
+
+                    items.Add(new SmartLedgerActionItem
+                    {
+                        Kind = SmartLedgerActionKind.Payment,
+                        Id = payment.Id,
+                        Reference = payment.Reference,
+                        Description = DescribePayment(payment),
+                        PendingAction = string.Join(", ", actions),
+                        Time = payment.HeadTime ?? payment.Time
+                    });
+                }
+
+                var reconciliations = db.Reconciliations
+                    .Where(x => x.HeadType != AccountReconciliation.ReconciliationWorkItem.WORK_TYPE_APPROVE
+                        && x.HeadType != AccountReconciliation.ReconciliationWorkItem.WORK_TYPE_COMPLETED)
+                    .OrderByDescending(x => x.HeadTime ?? x.Time)
+                    .ToList();
+
+                foreach (var reconciliation in reconciliations)
+                {
+                    if (reconciliation.WorkItemHead == null)
+                        continue;
+
+                    var head = db.ReconciliationWorkItems.AsNoTracking().FirstOrDefault(x => x.Id == reconciliation.WorkItemHead.Value);
+                    var actions = SmartLedgerActionPolicy.GetReconciliationActions(userId, reconciliation, head, entity);
+                    if (actions.Count == 0)
+                        continue;
+
+                    items.Add(new SmartLedgerActionItem
+                    {
+                        Kind = SmartLedgerActionKind.Reconciliation,
+                        Id = reconciliation.Id,
+                        Reference = reconciliation.Reference,
+                        Description = $"Reconcile {GetCashAccountInternal(db, reconciliation.AccountId)?.Name ?? "account"}",
+                        PendingAction = string.Join(", ", actions),
+                        Time = reconciliation.HeadTime ?? reconciliation.Time
+                    });
+                }
+
+                return items.OrderByDescending(x => x.Time).ToList();
+            });
+            totalN = ret.Count;
+            return pageSize == -1 ? ret.Skip(index).ToList() : ret.Skip(index).Take(pageSize).ToList();
+        }
+
+        private static string DescribePayment(Payment payment)
+        {
+            if (payment.IsDeposit)
+                return $"Receive {IntData.toString(payment.PositiveAmount)} Birr from {payment.ToPayTo}";
+            if (payment.IsTransferTransaction)
+                return $"Transfer {IntData.toString(payment.PositiveAmount)} Birr";
+            return $"Pay {IntData.toString(payment.PositiveAmount)} Birr to {payment.ToPayTo}";
+        }
         internal WorkItemPicture GetPicture(Guid guid)
         => DbRead(db => db.WorkItemPictures.Where(x => x.Id == guid).FirstOrDefault());
         internal List<WorkItemPicture> GetWorkItemPictures(Guid wi)

@@ -24,6 +24,7 @@ namespace TgBot.SmartLedger
             return Task.FromResult(false);
         }
         const string MAIN_REQUEST_PAYMENT = "Request Payment";
+        const string MAIN_MY_ACTION_LIST = "My Action List";
         const string MAIN_SHOW_ACCOUNTS = "Show Acounts";
         const string MAIN_LIST_PAYMENTS = "List Open Requests";
         const string MAIN_SETUP_FLOW = "Configure Payment System";
@@ -71,6 +72,7 @@ namespace TgBot.SmartLedger
                 var flowConfigured = config != null && config.Rule != null;
                 if (accountCount > 0 && prof.Permitted)
                 {
+                    buttons.Add(new KeyboardButton[] { MAIN_MY_ACTION_LIST });
                     buttons.Add(new KeyboardButton[] { MAIN_REQUEST_PAYMENT });
                     buttons.Add(new KeyboardButton[] { MAIN_REQUEST_DEPOSIT });
                     if (accountCount > 1)
@@ -206,6 +208,9 @@ namespace TgBot.SmartLedger
                                         return true;
                                     case MAIN_REQUEST_TRNSFER:
                                         await TGBot.PushDialog(msg.From.Id.ToString(), new RequestPaymentDialog(service, tgService, msg.Chat.Id, msg.From, paymentType: PaymentType.Transfer), cancellationToken);
+                                        return true;
+                                    case MAIN_MY_ACTION_LIST:
+                                        await TGBot.PushDialog(msg.From.Id.ToString(), new MyActionListViewer(service, tgService, msg.Chat.Id, msg.From), cancellationToken);
                                         return true;
                                     case MAIN_LIST_PAYMENTS:
                                         await TGBot.PushDialog(msg.From.Id.ToString(), new PaymentListViewer(service, msg.Chat.Id, msg.From), cancellationToken);
