@@ -103,11 +103,13 @@ sudo -u postgres psql -d intaps_pay -c 'select count(*) from "Payment";'
 - Status after migration:
   - `intapspayment.service` removed from systemd.
   - `/var/IntapsPay/App` removed.
-  - SQL Server database files under `/var/IntapsPay/DB` retained because
-    `intapstask.service` still points at the same `IntapsPay` database.
+  - `intapstask.service` removed from systemd after confirming it was
+    superseded by the rc deployment.
+  - `/var/IntapsTask` removed.
+  - SQL Server database `IntapsPay` dropped after backup verification.
+  - SQL Server database files under `/var/IntapsPay/DB` removed.
 
 Other services observed on the previous host and not moved as part of this
 payment bot migration:
 
 - `tlt_pay.service`
-- `intapstask.service`
