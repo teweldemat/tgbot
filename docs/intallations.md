@@ -18,6 +18,10 @@ configuration on the host when privileged access is needed.
 - Public URL prefix: `https://rc.intaps.com/pay/`
 - Internal Kestrel endpoint: `http://127.0.0.1:5082`
 - Bot app: `TgBot.SmartLedger.SmartLedgerBot`
+- Systemd ordering: `After=postgresql@12-main.service` and
+  `Wants=postgresql@12-main.service`; do not use `Requires=` for PostgreSQL,
+  because a PostgreSQL maintenance stop should not leave the bot permanently
+  stopped after PostgreSQL is started again.
 
 ### PostgreSQL
 
